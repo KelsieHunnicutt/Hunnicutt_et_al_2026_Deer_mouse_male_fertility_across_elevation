@@ -34,7 +34,7 @@ library(rnaturalearth) # for removing the great lakes
 library(ggpattern) # making object patterns for range overlap
 
 #set working directory
-knitr::opts_knit$set(root.dir = "/Users/kelsiehunnicutt/Library/CloudStorage/Dropbox-Personal/1_Work/Research/Spermoxia/github_code_version/")
+knitr::opts_knit$set(root.dir = "github_code_version/")
 knitr::opts_chunk$set(warning = FALSE, message = FALSE)
 
 getwd()
