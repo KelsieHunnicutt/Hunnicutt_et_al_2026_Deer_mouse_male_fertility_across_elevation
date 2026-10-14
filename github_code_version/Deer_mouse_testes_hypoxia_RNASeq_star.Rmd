@@ -43,7 +43,7 @@ suppressMessages(library(edgeR)) # for DE analysis
 #suppressMessages(library(SingleCellExperiment)) # for in silico deconvolution
 
 #set working directory
-knitr::opts_knit$set(root.dir = "/Users/kelsiehunnicutt/Library/CloudStorage/Dropbox-Personal/1_Work/Research/Spermoxia/github_code_version")
+knitr::opts_knit$set(root.dir = "github_code_version")
 getwd()
 unlink(".RData")
 options(scipen = 999)
