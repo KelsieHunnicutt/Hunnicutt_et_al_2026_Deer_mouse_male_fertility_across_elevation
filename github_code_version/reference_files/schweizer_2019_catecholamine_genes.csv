@@ -1,0 +1,427 @@
+﻿Gene,Name,Candidate Set
+Abcb6,"ATP-binding cassette, sub-family B (MDR/TAP), member 6",HIF
+Acvr1b,"activin A receptor, type 1B",HIF
+Adcy5,adenylate cyclase 5,HIF
+Adm,adrenomedullin,HIF
+Ahnak,AHNAK nucleoprotein (desmoyokin),HIF
+Akt1,thymoma viral proto-oncogene 1,HIF
+Aldoa,"aldolase A, fructose-bisphosphate",HIF
+Amotl2,angiomotin-like 2,HIF
+Angpt1,angiopoietin 1,HIF
+Angpt2,angiopoietin 2,HIF
+Angptl4,angiopoietin-like 4,HIF
+Ankrd12,ankyrin repeat domain 12,HIF
+Ankrd37,ankyrin repeat domain 37,HIF
+Ap3s1,"adaptor-related protein complex 3, sigma 1 subunit",HIF
+Aplp1,amyloid beta (A4) precursor-like protein 1,HIF
+Apold1,apolipoprotein L domain containing 1,HIF
+Atf4,activating transcription factor 4,HIF
+Avpi1,arginine vasopressin-induced 1,HIF
+Barx2,BarH-like homeobox 2,HIF
+Bbc3,BCL2 binding component 3,HIF
+Bckdha,"branched chain ketoacid dehydrogenase E1, alpha polypeptide",HIF
+Bcl2,B cell leukemia/lymphoma 2,HIF
+Bcl2l11,BCL2-like 11 (apoptosis facilitator),HIF
+Bcl6,B cell leukemia/lymphoma 6,HIF
+Bcor,BCL6 interacting corepressor,HIF
+Bmp2,bone morphogenetic protein 2,HIF
+Bmpr2,"bone morphogenetic protein receptor, type II (serine/threonine kinase)",HIF
+Bnip3,BCL2/adenovirus E1B interacting protein 3,HIF
+Bnip3l,BCL2/adenovirus E1B interacting protein 3-like,HIF
+Brsk2,BR serine/threonine kinase 2,HIF
+Btg1,"B cell translocation gene 1, anti-proliferative",HIF
+Camk2d,"calcium/calmodulin-dependent protein kinase II, delta",HIF
+Cav1,"caveolin 1, caveolae protein",HIF
+Ccnl1,cyclin L1,HIF
+Cdh22,cadherin 22,HIF
+Cdkn1a,cyclin-dependent kinase inhibitor 1A (P21),HIF
+Cdkn1b,cyclin-dependent kinase inhibitor 1B,HIF
+Chst8,carbohydrate sulfotransferase 8,HIF
+Chsy1,chondroitin sulfate synthase 1,HIF
+Cited2,"Cbp/p300-interacting transactivator, with Glu/Asp-rich carboxy-terminal domain, 2",HIF
+Clk3,CDC-like kinase 3,HIF
+Cox4i2,cytochrome c oxidase subunit 4I2,HIF
+Cp,ceruloplasmin,HIF
+Ctgf,unknown,HIF
+Ctsc,cathepsin C,HIF
+Cul2,cullin 2,HIF
+Cxcl12,chemokine (C-X-C motif) ligand 12,HIF
+Cxcr4,chemokine (C-X-C motif) receptor 4,HIF
+Cybb,"cytochrome b-245, beta polypeptide",HIF
+Dars,aspartyl-tRNA synthetase,HIF
+Ddit4,DNA-damage-inducible transcript 4,HIF
+Ddn,dendrin,HIF
+Ddr1,"discoidin domain receptor family, member 1",HIF
+Ddx4,DEAD (Asp-Glu-Ala-Asp) box polypeptide 4,HIF
+Dll4,delta like canonical Notch ligand 4,HIF
+Dscaml1,DS cell adhesion molecule like 1,HIF
+Dtna,dystrobrevin alpha,HIF
+Dusp1,dual specificity phosphatase 1,HIF
+Dysf,dysferlin,HIF
+Edn1,endothelin 1,HIF
+Efna3,ephrin A3,HIF
+Egf,epidermal growth factor,HIF
+Egfr,epidermal growth factor receptor,HIF
+Egln1,egl-9 family hypoxia-inducible factor 1,HIF
+Egln3,egl-9 family hypoxia-inducible factor 3,HIF
+Egr2,early growth response 2,HIF
+Eif4e,eukaryotic translation initiation factor 4E,HIF
+Eif4ebp1,eukaryotic translation initiation factor 4E binding protein 1,HIF
+Elf3,E74-like factor 3,HIF
+Elovl4,"elongation of very long chain fatty acids (FEN1/Elo2, SUR4/Elo3, yeast)-like 4",HIF
+Eng,endoglin,HIF
+Eno1,"enolase 1, alpha non-neuron",HIF
+Epas1,endothelial PAS domain protein 1,HIF
+Epo,erythropoietin,HIF
+Ero1l,ERO1-like (S. cerevisiae),HIF
+Fam107b,"family with sequence similarity 107, member B",HIF
+Fam19a5,"family with sequence similarity 19, member A5",HIF
+Fbl,fibrillarin,HIF
+Fbxo42,F-box protein 42,HIF
+Fech,ferrochelatase,HIF
+Fgf11,fibroblast growth factor 11,HIF
+Fibcd1,fibrinogen C domain containing 1,HIF
+Flt1,FMS-like tyrosine kinase 1,HIF
+Fnip1,folliculin interacting protein 1,HIF
+Foxd1,forkhead box D1,HIF
+Foxn4,forkhead box N4,HIF
+Foxo3,forkhead box O3,HIF
+Gadd45a,growth arrest and DNA-damage-inducible 45 alpha,HIF
+Gadd45b,growth arrest and DNA-damage-inducible 45 beta,HIF
+Gapdh,glyceraldehyde-3-phosphate dehydrogenase,HIF
+Gbe1,"glucan (1,4-alpha-), branching enzyme 1",HIF
+Gja1,"gap junction protein, alpha 1",HIF
+Gnai1,"guanine nucleotide binding protein (G protein), alpha inhibiting 1",HIF
+Gpr25,G protein-coupled receptor 25,HIF
+Gpt2,glutamic pyruvate transaminase (alanine aminotransferase) 2,HIF
+Gpx3,glutathione peroxidase 3,HIF
+Gramd1c,GRAM domain containing 1C,HIF
+Gys1,"glycogen synthase 1, muscle",HIF
+Hivep2,human immunodeficiency virus type I enhancer binding protein 2,HIF
+Hk1,hexokinase 1,HIF
+Hk2,hexokinase 2,HIF
+Hmox1,heme oxygenase 1,HIF
+Homer1,homer scaffolding protein 1,HIF
+Hoxa11,homeobox A11,HIF
+Hoxa4,homeobox A4,HIF
+Huwe1,"HECT, UBA and WWE domain containing 1",HIF
+Id2,inhibitor of DNA binding 2,HIF
+Ier5l,immediate early response 5-like,HIF
+Ifng,interferon gamma,HIF
+Ifngr1,interferon gamma receptor 1,HIF
+Igf1r,insulin-like growth factor I receptor,HIF
+Igf2,insulin-like growth factor 2,HIF
+Igfbp3,insulin-like growth factor binding protein 3,HIF
+Igfbp5,insulin-like growth factor binding protein 5,HIF
+Il1rap,interleukin 1 receptor accessory protein,HIF
+Il6,interleukin 6,HIF
+Il6ra,"interleukin 6 receptor, alpha",HIF
+Irf1,interferon regulatory factor 1,HIF
+Jmy,junction-mediating and regulatory protein,HIF
+Kcng3,"potassium voltage-gated channel, subfamily G, member 3",HIF
+Klf10,Kruppel-like factor 10,HIF
+Klf4,Kruppel-like factor 4 (gut),HIF
+Klf6,Kruppel-like factor 6,HIF
+Klf7,Kruppel-like factor 7 (ubiquitous),HIF
+Klhdc3,kelch domain containing 3,HIF
+L1cam,L1 cell adhesion molecule,HIF
+Ldb1,LIM domain binding 1,HIF
+Ldha,lactate dehydrogenase A,HIF
+Lep,leptin,HIF
+Lgals1,"lectin, galactose binding, soluble 1",HIF
+Lox,lysyl oxidase,HIF
+Loxl2,lysyl oxidase-like 2,HIF
+Loxl4,lysyl oxidase-like 4,HIF
+Ltbr,lymphotoxin B receptor,HIF
+Maff,"v-maf musculoaponeurotic fibrosarcoma oncogene family, protein F (avian)",HIF
+Map2k1,mitogen-activated protein kinase kinase 1,HIF
+Mapk1,mitogen-activated protein kinase 1,HIF
+Mcl1,myeloid cell leukemia sequence 1,HIF
+Mdga2,MAM domain containing glycosylphosphatidylinositol anchor 2,HIF
+Megf6,multiple EGF-like-domains 6,HIF
+Met,met proto-oncogene,HIF
+Mif,macrophage migration inhibitory factor (glycosylation-inhibiting factor),HIF
+Mknk1,MAP kinase-interacting serine/threonine kinase 1,HIF
+Mknk2,MAP kinase-interacting serine/threonine kinase 2,HIF
+Mmp14,matrix metallopeptidase 14 (membrane-inserted),HIF
+Mmp2,matrix metallopeptidase 2,HIF
+Mmp9,matrix metallopeptidase 9,HIF
+Mnt,max binding protein,HIF
+Mtch2,mitochondrial carrier 2,HIF
+Mtor,mechanistic target of rapamycin kinase,HIF
+Mttp,microsomal triglyceride transfer protein,HIF
+Mxi1,"MAX interactor 1, dimerization protein",HIF
+Negr1,neuronal growth regulator 1,HIF
+Nfil3,"nuclear factor, interleukin 3, regulated",HIF
+Nfkb1,"nuclear factor of kappa light polypeptide gene enhancer in B cells 1, p105",HIF
+Nos2,"nitric oxide synthase 2, inducible",HIF
+Nos3,"nitric oxide synthase 3, endothelial cell",HIF
+Nppa,natriuretic peptide type A,HIF
+Nr4a1,"nuclear receptor subfamily 4, group A, member 1",HIF
+Nr4a3,"nuclear receptor subfamily 4, group A, member 3",HIF
+Nrn1,neuritin 1,HIF
+Nrxn2,neurexin II,HIF
+Nxph1,neurexophilin 1,HIF
+Oxsr1,oxidative-stress responsive 1,HIF
+P4ha1,"procollagen-proline, 2-oxoglutarate 4-dioxygenase (proline 4-hydroxylase), alpha 1 polypeptide",HIF
+P4ha2,"procollagen-proline, 2-oxoglutarate 4-dioxygenase (proline 4-hydroxylase), alpha II polypeptide",HIF
+Pag1,phosphoprotein associated with glycosphingolipid microdomains 1,HIF
+Pappa,pregnancy-associated plasma protein A,HIF
+Pcolce2,procollagen C-endopeptidase enhancer 2,HIF
+Pcyt1b,"phosphate cytidylyltransferase 1, choline, beta isoform",HIF
+Pdgfb,"platelet derived growth factor, B polypeptide",HIF
+Pdha1,pyruvate dehydrogenase E1 alpha 1,HIF
+Pdk1,"pyruvate dehydrogenase kinase, isoenzyme 1",HIF
+Pdk3,"pyruvate dehydrogenase kinase, isoenzyme 3",HIF
+Pebp4,phosphatidylethanolamine binding protein 4,HIF
+Pfkfb3,"6-phosphofructo-2-kinase/fructose-2,6-biphosphatase 3",HIF
+Pfkl,"phosphofructokinase, liver, B-type",HIF
+Pfkp,"phosphofructokinase, platelet",HIF
+Pgam1,phosphoglycerate mutase 1,HIF
+Pgf,placental growth factor,HIF
+Pgk1,phosphoglycerate kinase 1,HIF
+Phactr3,phosphatase and actin regulator 3,HIF
+Phf20,PHD finger protein 20,HIF
+Phf21a,PHD finger protein 21A,HIF
+Pik3ca,"phosphatidylinositol-4,5-bisphosphate 3-kinase catalytic subunit alpha",HIF
+Pim1,proviral integration site 1,HIF
+Pim2,proviral integration site 2,HIF
+Pinx1,"PIN2/TERF1 interacting, telomerase inhibitor 1",HIF
+Plaur,"plasminogen activator, urokinase receptor",HIF
+Plcg1,"phospholipase C, gamma 1",HIF
+Plch2,"phospholipase C, eta 2",HIF
+Plekha2,"pleckstrin homology domain-containing, family A (phosphoinositide binding specific) member 2",HIF
+Plod1,"procollagen-lysine, 2-oxoglutarate 5-dioxygenase 1",HIF
+Plod2,"procollagen lysine, 2-oxoglutarate 5-dioxygenase 2",HIF
+Plxnd1,plexin D1,HIF
+Pnrc1,proline-rich nuclear receptor coactivator 1,HIF
+Ppme1,protein phosphatase methylesterase 1,HIF
+Ppp1r3c,"protein phosphatase 1, regulatory subunit 3C",HIF
+Ppp1r9a,"protein phosphatase 1, regulatory subunit 9A",HIF
+Prkca,"protein kinase C, alpha",HIF
+Psd3,pleckstrin and Sec7 domain containing 3,HIF
+Ptbp2,polypyrimidine tract binding protein 2,HIF
+Ptprr,"protein tyrosine phosphatase, receptor type, R",HIF
+Rap2b,"RAP2B, member of RAS oncogene family",HIF
+Rassf1,Ras association (RalGDS/AF-6) domain family member 1,HIF
+Rcor1,REST corepressor 1,HIF
+Rcor2,REST corepressor 2,HIF
+Rhobtb1,Rho-related BTB domain containing 1,HIF
+Rlf,rearranged L-myc fusion sequence,HIF
+Rnf165,ring finger protein 165,HIF
+Rora,RAR-related orphan receptor alpha,HIF
+Rorc,RAR-related orphan receptor gamma,HIF
+Rps6kb2,"ribosomal protein S6 kinase, polypeptide 2",HIF
+Rragd,Ras-related GTP binding D,HIF
+Rsbn1,"rosbin, round spermatid basic protein 1",HIF
+Rybp,RING1 and YY1 binding protein,HIF
+Scn1a,"sodium channel, voltage-gated, type I, alpha",HIF
+Sec24a,"Sec24 related gene family, member A (S. cerevisiae)",HIF
+Sergef,secretion regulating guanine nucleotide exchange factor,HIF
+Serpine1,"serine (or cysteine) peptidase inhibitor, clade E, member 1",HIF
+Sfxn3,sideroflexin 3,HIF
+Shb,src homology 2 domain-containing transforming protein B,HIF
+Siah2,siah E3 ubiquitin protein ligase 2,HIF
+Slc25a36,"solute carrier family 25, member 36",HIF
+Slc2a1,"solute carrier family 2 (facilitated glucose transporter), member 1",HIF
+Slc38a3,"solute carrier family 38, member 3",HIF
+Slco5a1,"solute carrier organic anion transporter family, member 5A1",HIF
+Smad7,SMAD family member 7,HIF
+Snai1,snail family zinc finger 1,HIF
+Snai2,snail family zinc finger 2,HIF
+Sod2,"superoxide dismutase 2, mitochondrial",HIF
+Spock1,"sparc/osteonectin, cwcv and kazal-like domains proteoglycan 1",HIF
+Spry1,sprouty RTK signaling antagonist 1,HIF
+St6gal1,"beta galactoside alpha 2,6 sialyltransferase 1",HIF
+Stat3,signal transducer and activator of transcription 3,HIF
+Stc1,stanniocalcin 1,HIF
+Stc2,stanniocalcin 2,HIF
+Syt5,synaptotagmin V,HIF
+Tbk1,TANK-binding kinase 1,HIF
+Tceal3,transcription elongation factor A (SII)-like 3,HIF
+Tceal7,transcription elongation factor A (SII)-like 7,HIF
+Tcf3,transcription factor 3,HIF
+Tef,thyrotroph embryonic factor,HIF
+Tek,TEK receptor tyrosine kinase,HIF
+Tert,telomerase reverse transcriptase,HIF
+Tex264,testis expressed gene 264,HIF
+Tfap2b,transcription factor AP-2 beta,HIF
+Tfrc,transferrin receptor,HIF
+Tgfa,transforming growth factor alpha,HIF
+Thrb,thyroid hormone receptor beta,HIF
+Timp1,tissue inhibitor of metalloproteinase 1,HIF
+Tlr4,toll-like receptor 4,HIF
+Tmem45a,transmembrane protein 45a,HIF
+Tnfaip3,"tumor necrosis factor, alpha-induced protein 3",HIF
+Tpd52,tumor protein D52,HIF
+Trf,transferrin,HIF
+Trpc1,"transient receptor potential cation channel, subfamily C, member 1",HIF
+Tsc22d3,"TSC22 domain family, member 3",HIF
+Twist1,twist basic helix-loop-helix transcription factor 1,HIF
+Ugp2,UDP-glucose pyrophosphorylase 2,HIF
+Uvrag,UV radiation resistance associated gene,HIF
+Vapa,"vesicle-associated membrane protein, associated protein A",HIF
+Vegfa,vascular endothelial growth factor A,HIF
+Vegfb,vascular endothelial growth factor B,HIF
+Vim,vimentin,HIF
+Wee1,WEE 1 homolog 1 (S. pombe),HIF
+Wt1,Wilms tumor 1 homolog,HIF
+Xpnpep1,"X-prolyl aminopeptidase (aminopeptidase P) 1, soluble",HIF
+Yeats2,YEATS domain containing 2,HIF
+Ypel5,yippee like 5,HIF
+Zbtb25,zinc finger and BTB domain containing 25,HIF
+Zc3h6,zinc finger CCCH type containing 6,HIF
+Zdhhc9,"zinc finger, DHHC domain containing 9",HIF
+Zeb1,zinc finger E-box binding homeobox 1,HIF
+Zeb2,zinc finger E-box binding homeobox 2,HIF
+Zfx,zinc finger protein X-linked,HIF
+Zic4,zinc finger protein of the cerebellum 4,HIF
+Abat,4-aminobutyrate aminotransferase,Catecholamine
+Adcy6,adenylate cyclase 6,Catecholamine
+Adipoq,"adiponectin, C1Q and collagen domain containing",Catecholamine
+Adora2a,adenosine A2a receptor,Catecholamine
+Adora2b,adenosine A2b receptor,Catecholamine
+Adra2a,"adrenergic receptor, alpha 2a",Catecholamine
+Adra2b,"adrenergic receptor, alpha 2b",Catecholamine
+Adra2c,"adrenergic receptor, alpha 2c",Catecholamine
+Adrb1,"adrenergic receptor, beta 1",Catecholamine
+Adrb2,"adrenergic receptor, beta 2",Catecholamine
+Adrb3,"adrenergic receptor, beta 3",Catecholamine
+Agt,"angiotensinogen (serpin peptidase inhibitor, clade A, member 8)",Catecholamine
+Agtr1a,"angiotensin II receptor, type 1a",Catecholamine
+Agtr2,"angiotensin II receptor, type 2",Catecholamine
+Akap6,A kinase (PRKA) anchor protein 6,Catecholamine
+Akr1b3,"aldo-keto reductase family 1, member B3 (aldose reductase)",Catecholamine
+Aoc2,"amine oxidase, copper containing 2 (retina-specific)",Catecholamine
+Aplp1,amyloid beta (A4) precursor-like protein 1,Catecholamine
+App,amyloid beta (A4) precursor protein,Catecholamine
+Atf4,activating transcription factor 4,Catecholamine
+Atp2b4,"ATPase, Ca++ transporting, plasma membrane 4",Catecholamine
+Atp7a,"ATPase, Cu++ transporting, alpha polypeptide",Catecholamine
+Cadps,Ca2+-dependent secretion activator,Catecholamine
+Cartpt,CART prepropeptide,Catecholamine
+Chga,chromogranin A,Catecholamine
+Chrm5,"cholinergic receptor, muscarinic 5",Catecholamine
+Chrna4,"cholinergic receptor, nicotinic, alpha polypeptide 4",Catecholamine
+Chrna6,"cholinergic receptor, nicotinic, alpha polypeptide 6",Catecholamine
+Chrna7,"cholinergic receptor, nicotinic, alpha polypeptide 7",Catecholamine
+Chrnb2,"cholinergic receptor, nicotinic, beta polypeptide 2 (neuronal)",Catecholamine
+Cnr1,cannabinoid receptor 1 (brain),Catecholamine
+Comt,catechol-O-methyltransferase,Catecholamine
+Crh,corticotropin releasing hormone,Catecholamine
+Crhr1,corticotropin releasing hormone receptor 1,Catecholamine
+Crhr2,corticotropin releasing hormone receptor 2,Catecholamine
+Cxcl12,chemokine (C-X-C motif) ligand 12,Catecholamine
+Cyp2d22,"cytochrome P450, family 2, subfamily d, polypeptide 22",Catecholamine
+Dao,D-amino acid oxidase,Catecholamine
+Dbh,dopamine beta hydroxylase,Catecholamine
+Ddc,dopa decarboxylase,Catecholamine
+Dnm2,dynamin 2,Catecholamine
+Drd1,dopamine receptor D1,Catecholamine
+Drd2,dopamine receptor D2,Catecholamine
+Drd3,dopamine receptor D3,Catecholamine
+Drd4,dopamine receptor D4,Catecholamine
+Drd5,dopamine receptor D5,Catecholamine
+Dtnbp1,dystrobrevin binding protein 1,Catecholamine
+Entpd1,ectonucleoside triphosphate diphosphohydrolase 1,Catecholamine
+Epas1,endothelial PAS domain protein 1,Catecholamine
+Gabbr1,"gamma-aminobutyric acid (GABA) B receptor, 1",Catecholamine
+Gabpa,"GA repeat binding protein, alpha",Catecholamine
+Gata3,GATA binding protein 3,Catecholamine
+Gch1,GTP cyclohydrolase 1,Catecholamine
+Gck,glucokinase,Catecholamine
+Gdnf,glial cell line derived neurotrophic factor,Catecholamine
+Ghsr,growth hormone secretagogue receptor,Catecholamine
+Gnas,"GNAS (guanine nucleotide binding protein, alpha stimulating) complex locus",Catecholamine
+Gpr143,G protein-coupled receptor 143,Catecholamine
+Gpr37,G protein-coupled receptor 37,Catecholamine
+Grin2a,"glutamate receptor, ionotropic, NMDA2A (epsilon 1)",Catecholamine
+Grk2,G protein-coupled receptor kinase 2,Catecholamine
+Hand2,heart and neural crest derivatives expressed 2,Catecholamine
+Hdc,histidine decarboxylase,Catecholamine
+Hprt,hypoxanthine guanine phosphoribosyl transferase,Catecholamine
+Hrh3,histamine receptor H3,Catecholamine
+Htr1a,5-hydroxytryptamine (serotonin) receptor 1A,Catecholamine
+Htr1b,5-hydroxytryptamine (serotonin) receptor 1B,Catecholamine
+Htr2a,5-hydroxytryptamine (serotonin) receptor 2A,Catecholamine
+Htr2c,5-hydroxytryptamine (serotonin) receptor 2C,Catecholamine
+Htr6,5-hydroxytryptamine (serotonin) receptor 6,Catecholamine
+Insm1,insulinoma-associated 1,Catecholamine
+Itgam,integrin alpha M,Catecholamine
+Kcna2,"potassium voltage-gated channel, shaker-related subfamily, member 2",Catecholamine
+Kcnb1,"potassium voltage gated channel, Shab-related subfamily, member 1",Catecholamine
+Kl,klotho,Catecholamine
+Lrrk2,leucine-rich repeat kinase 2,Catecholamine
+Ly6e,"lymphocyte antigen 6 complex, locus E",Catecholamine
+Maoa,monoamine oxidase A,Catecholamine
+Maob,monoamine oxidase B,Catecholamine
+Mapk1,mitogen-activated protein kinase 1,Catecholamine
+Mapk3,mitogen-activated protein kinase 3,Catecholamine
+Mecp2,methyl CpG binding protein 2,Catecholamine
+Moxd1,"monooxygenase, DBH-like 1",Catecholamine
+Moxd2,"monooxygenase, DBH-like 2",Catecholamine
+Nat8l,N-acetyltransferase 8-like,Catecholamine
+nm3,neurological mutant 3,Catecholamine
+Nos1,"nitric oxide synthase 1, neuronal",Catecholamine
+Npr1,natriuretic peptide receptor 1,Catecholamine
+Npy2r,neuropeptide Y receptor Y2,Catecholamine
+Nr4a2,"nuclear receptor subfamily 4, group A, member 2",Catecholamine
+Nr4a3,"nuclear receptor subfamily 4, group A, member 3",Catecholamine
+Olfr1101,olfactory receptor 1101,Catecholamine
+Olfr150,olfactory receptor 150,Catecholamine
+Olfr275,olfactory receptor 275,Catecholamine
+Olfr683,olfactory receptor 683,Catecholamine
+Olfr684,olfactory receptor 684,Catecholamine
+Olfr919,olfactory receptor 919,Catecholamine
+Oprk1,"opioid receptor, kappa 1",Catecholamine
+Oxt,oxytocin,Catecholamine
+Oxtr,oxytocin receptor,Catecholamine
+P2ry1,"purinergic receptor P2Y, G-protein coupled 1",Catecholamine
+P2ry12,"purinergic receptor P2Y, G-protein coupled 12",Catecholamine
+Park7,"Parkinson disease (autosomal recessive, early onset) 7",Catecholamine
+Pcp4,Purkinje cell protein 4,Catecholamine
+Pde1b,"phosphodiesterase 1B, Ca2+-calmodulin dependent",Catecholamine
+Pde4b,"phosphodiesterase 4B, cAMP specific",Catecholamine
+Pde4d,"phosphodiesterase 4D, cAMP specific",Catecholamine
+Pink1,PTEN induced putative kinase 1,Catecholamine
+Plcd1,"phospholipase C, delta 1",Catecholamine
+Pnkd,paroxysmal nonkinesiogenic dyskinesia,Catecholamine
+Pnmt,phenylethanolamine-N-methyltransferase,Catecholamine
+Prkcb,"protein kinase C, beta",Catecholamine
+Ptger3,prostaglandin E receptor 3 (subtype EP3),Catecholamine
+Ptgs1,prostaglandin-endoperoxide synthase 1,Catecholamine
+Rab3b,"RAB3B, member RAS oncogene family",Catecholamine
+Rnf180,ring finger protein 180,Catecholamine
+Rnls,"renalase, FAD-dependent amine oxidase",Catecholamine
+Rtl4,retrotransposon Gag like 4,Catecholamine
+Rtn4,reticulon 4,Catecholamine
+Ryr2,"ryanodine receptor 2, cardiac",Catecholamine
+Sdhd,"succinate dehydrogenase complex, subunit D, integral membrane protein",Catecholamine
+Sirt2,sirtuin 2,Catecholamine
+Slc18a1,"solute carrier family 18 (vesicular monoamine), member 1",Catecholamine
+Slc22a1,"solute carrier family 22 (organic cation transporter), member 1",Catecholamine
+Slc22a2,"solute carrier family 22 (organic cation transporter), member 2",Catecholamine
+Slc22a3,"solute carrier family 22 (organic cation transporter), member 3",Catecholamine
+Slc6a2,"solute carrier family 6 (neurotransmitter transporter, noradrenalin), member 2",Catecholamine
+Slc6a3,"solute carrier family 6 (neurotransmitter transporter, dopamine), member 3",Catecholamine
+Slc6a4,"solute carrier family 6 (neurotransmitter transporter, serotonin), member 4",Catecholamine
+Slc9a1,"solute carrier family 9 (sodium/hydrogen exchanger), member 1",Catecholamine
+Smpd3,"sphingomyelin phosphodiesterase 3, neutral",Catecholamine
+Snca,"synuclein, alpha",Catecholamine
+Sncaip,"synuclein, alpha interacting protein (synphilin)",Catecholamine
+Sncb,"synuclein, beta",Catecholamine
+Sncg,"synuclein, gamma",Catecholamine
+Spr,sepiapterin reductase,Catecholamine
+Stx1a,syntaxin 1A (brain),Catecholamine
+Sult1a1,"sulfotransferase family 1A, phenol-preferring, member 1",Catecholamine
+Sult1d1,"sulfotransferase family 1D, member 1",Catecholamine
+Syt1,synaptotagmin I,Catecholamine
+Syt4,synaptotagmin IV,Catecholamine
+Syt7,synaptotagmin VII,Catecholamine
+Tacr3,tachykinin receptor 3,Catecholamine
+Tgfb2,"transforming growth factor, beta 2",Catecholamine
+Th,tyrosine hydroxylase,Catecholamine
+Tomt,transmembrane O-methyltransferase,Catecholamine
+Tor1a,"torsin family 1, member A (torsin A)",Catecholamine
+Vhl,von Hippel-Lindau tumor suppressor,Catecholamine
+Vps35,VPS35 retromer complex component,Catecholamine

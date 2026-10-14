@@ -1,0 +1,1976 @@
+---
+title: "Deer mouse testes RNASeq"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+```{r setup}
+suppressMessages(library(reshape2)) #for dataframe manipulation
+suppressMessages(library(ggplot2)) # for data visualization
+suppressMessages(library(vegan)) # for count normalization
+suppressMessages(library(data.table)) # for dataframe manipulation
+suppressMessages(library(Rsubread)) # for dataframe manipulation
+suppressMessages(library(ggbeeswarm)) # for data visualization
+suppressMessages(library(tidyr)) # for dataframe manipulation
+suppressMessages(library(ggsignif)) # for addition of statistics to graphs
+suppressMessages(library(cowplot)) # for multipanel plot organization
+suppressMessages(library(dendextend)) # for dendrograms in WGCNA analysis
+suppressMessages(library(scales)) # for color scales
+suppressMessages(library(gprofiler2)) # for GO enrichment analysis
+suppressMessages(library(VennDiagram)) # for venn diagrams
+suppressMessages(library(variancePartition)) # DE analysis
+suppressMessages(library(BiocParallel)) # for running bioconductor packages with multiple threads
+suppressMessages(library(WGCNA)) # gene co-expression networks
+suppressMessages(library(biomaRt)) # orthology between mouse and deer mouse
+suppressMessages(library(lme4)) # for phenotype stats
+suppressMessages(library(lmerTest)) # for phenotype stats
+suppressMessages(library(GO.db)) # apoptosis GO terms
+suppressMessages(library(org.Mm.eg.db)) # apoptosis GO terms
+suppressMessages(library(FSA)) #for dunn's test
+suppressMessages(library(dplyr)) #data manipuation
+suppressMessages(library(Hmisc)) # statistics
+suppressMessages(library(corrplot)) # correlation calculations
+suppressMessages(library(ComplexHeatmap)) #for heatmap generation
+suppressMessages(library(circlize)) # for heatmap coloring
+suppressMessages(library(betareg)) # for cell type proportion stats
+suppressMessages(library(purrr)) # for cell type proportion stats
+suppressMessages(library(edgeR)) # for DE analysis
+
+#these are loaded later in the in silico deconvolution section
+#suppressMessages(library(MuSiC)) # for in silico deconvolution
+#suppressMessages(library(Biobase)) # for in silico deconvolution
+#suppressMessages(library(SingleCellExperiment)) # for in silico deconvolution
+
+#set working directory
+knitr::opts_knit$set(root.dir = "/Users/kelsiehunnicutt/Library/CloudStorage/Dropbox-Personal/1_Work/Research/Spermoxia/github_code_version")
+getwd()
+unlink(".RData")
+options(scipen = 999)
+
+run_WGCNA <- FALSE
+```
+
+```{r read-in-star-count-data}
+# Read in count files from multiple samples
+pman_count_files <- list.files(path = "RNAseq_count_files", pattern = "ReadsPerGene.out.tab", full.names = TRUE)
+
+# Read first file to get gene names
+count_data <- read.table(pman_count_files[1], header = FALSE, skip = 4)
+gene_ids <- count_data[,1]
+
+# Create count matrix using column 2 for unstranded
+count_data <- sapply(pman_count_files, function(f) {
+  example_count_file <- read.table(f, header = FALSE, skip = 4)
+  example_count_file[,2] 
+})
+
+# fix row and column names to match gene ids and sample ids
+rownames(count_data) <- gene_ids
+colnames(count_data) <- gsub("_ReadsPerGene.out.tab", "", gsub("RNAseq_count_files/", "", pman_count_files))
+
+# check dimensions
+dim(count_data)
+
+# import annotations and chromosome info
+annotations <- flattenGTF("reference_files/annotations/GCF_049852395.1_HU_Pman_BW_mat_3.1_annotation.gtf", GTF.featureType = "gene", method = "merge")
+genome_info <- read.csv("reference_files/annotations/GCF_049852395.1_chromosome_list.csv", header = TRUE)
+
+# reformatting annotations and incorporating chromosome info
+colnames(annotations) <- c("GeneID", "refseq_accession", "start", "end", "strand")
+annotations <- merge(annotations, genome_info, by = "refseq_accession")
+rownames(annotations) <- annotations$GeneID
+annotations <- annotations[order(rownames(annotations)),]
+
+# reorder chromosomes
+chr_order <- paste("chr", c(seq(1,23), "X", "MT"), sep = "")
+annotations$chr <- factor(annotations$chr, levels = chr_order)
+
+# add in gene length
+annotations$length <- annotations$end - annotations$start
+
+# restrict to just genes found in count files
+annotations <- annotations[annotations$GeneID %in% rownames(count_data),]
+
+# check dimensions
+dim(annotations)
+```
+
+<h3>Reformatting comp names</h3>
+```{r renaming-acclimations-across-dfs}
+# in preparation for DGE creation, make a dataframe of just gene name and counts
+# match order of count dataframe to annotations
+count_data <- count_data[order(rownames(count_data)),]
+dim(count_data)
+
+# change strain labels
+colnames(count_data) <- gsub("^K", "KN_F4", colnames(count_data))
+colnames(count_data) <- gsub("^M", "MBS_F5", colnames(count_data))
+
+# change tissue labels
+colnames(count_data) <- gsub("R$", "", colnames(count_data))
+colnames(count_data) <- gsub("_T([0-4])$", "_testes_\\1", colnames(count_data))
+
+# change acclimation labels
+colnames(count_data) <- gsub("0$", "Control", colnames(count_data))
+colnames(count_data) <- gsub("1$", "2day", colnames(count_data))
+colnames(count_data) <- gsub("2$", "2wk", colnames(count_data))
+colnames(count_data) <- gsub("3$", "6wk", colnames(count_data))
+```
+
+```{r}
+#make a metadata df
+metadata <- data.frame(mouse_id = colnames(count_data))
+metadata <- metadata %>%
+  separate(1, into = c("strain", "generation", "family", "individual", "tissue", "acclimation"), 
+           sep = "_", remove = FALSE)
+rownames(metadata) <- metadata$mouse_id
+metadata$comp <- paste(metadata$strain, metadata$acclimation, sep = "_")
+
+# remove outliers; this individual was found dead after an unknown period of time
+outliers <- c("MBS_F5_812_E_testes_Control")
+metadata <- metadata[!(metadata$mouse_id %in% outliers),]
+count_data <- count_data[,!(colnames(count_data) %in% outliers)]
+
+#subset count_data and metadata by tissue
+count_data_testes <- count_data[,grep("testes", colnames(count_data))]
+metadata_testes <- metadata[grep("testes", rownames(metadata)),]
+```
+
+<h1>Color Set-Up</h1>
+```{r color-setup}
+# define the paper's color palette
+KN_Control_color <- "#fabeaf"
+KN_2day_color    <- "#ef8267"
+KN_2wk_color     <- "#c43512"
+KN_6wk_color     <- "#8c250b"
+
+MBS_Control_color <- "#afcae3"
+MBS_2day_color    <- "#3e89cf"
+MBS_2wk_color     <- "#336491"
+MBS_6wk_color     <- "#143759"
+
+all_combo_colors <- c(KN_Control = "#fabeaf",
+                      KN_2day = "#ef8267",
+                      KN_2wk = "#c43512",
+                      KN_6wk = "#8c250b",
+                      MBS_Control = "#afcae3",
+                      MBS_2day = "#3e89cf",
+                      MBS_2wk = "#336491",
+                      MBS_6wk = "#143759")
+
+all_combo_shapes <- c(KN_Control = 21,
+                      KN_2day = 24,
+                      KN_2wk = 22,
+                      KN_6wk = 23,
+                      MBS_Control = 21,
+                      MBS_2day = 24,
+                      MBS_2wk = 22,
+                      MBS_6wk = 23)
+
+# define color palette for all heatmaps
+colfunc <- colorRampPalette(c("#F6F3F3", "#231A1A"))
+browns <- colfunc(255)
+rm(colfunc)
+
+# define the plotting order of strains and hypoxic exposure treatments
+strains <- c("KN", "MBS")
+acclimations <- c("Control", "2day", "2wk", "6wk")
+strains <- factor(strains, levels = c("KN", "MBS"))
+acclimations <- factor(acclimations, levels = c("Control", "2day", "2wk", "6wk"))
+
+combinations <- paste(rep(strains, each = length(acclimations)), acclimations, sep = "_")
+
+#a function to convert a vector from raw p-values to significance symbols
+sig_conversion <- function(misc_dataframe) {
+  triple <- misc_dataframe <= 0.001
+  double <- misc_dataframe >= 0.001 & misc_dataframe<0.01 
+  single <- misc_dataframe >= 0.01 & misc_dataframe<0.05 
+  nonsig <- misc_dataframe >= 0.05 
+  misc_dataframe[single] <- "*"
+  misc_dataframe[double] <- "**"
+  misc_dataframe[triple] <- "***"
+  misc_dataframe[nonsig] <- "n.s."
+  print(misc_dataframe)
+}
+```
+
+```{r import-phenotype-data}
+phenotypes <- read.csv(file = "exported_files/high_elevation_male_fertility_phenotypes_post-processing.csv")
+phenotypes <- phenotypes[phenotypes$strain %in% strains,]
+phenotypes$mouse_id <- gsub("$", "_testes", phenotypes$mouse_id)
+phenotypes$mouse_id <- paste(phenotypes$mouse_id, phenotypes$acclimation, sep = "_")
+
+phenotypes$comp <- factor(phenotypes$comp, levels = combinations)
+phenotypes$strain <- factor(phenotypes$strain, levels = strains)
+phenotypes$acclimation <- factor(phenotypes$acclimation, levels = acclimations)
+```
+
+<h3>Settings</h3>
+```{r settings-and-base-expression-stats}
+# set thresholds for determining if a gene is "expressed" by filterByExpr below
+count.cutoff <- 10
+min.reps <- 3
+
+# methods used for normalizing data
+norm.method <- "RLE"
+
+# printing for record keeping purposes
+print("Parameters Used:")
+paste("All expressed genes have a minimum rpkm of:", count.cutoff, sep = " ")
+paste("An expressed gene must be expressed in at least", min.reps, "samples", sep = " ")
+paste("Counts are normalized with:", norm.method, sep = " ")
+
+# normalize_dge reads in a dge, applies the rpkm and minimum replicate cutoffs for determining if a gene is expressed, then it re-normalizes the data using the normalization method specified above
+normalize_dge <- function(dge_name) {
+  #keep <- filterByExpr(dgeTestes, min.count = count.cutoff)
+  
+  keep_MBS <- filterByExpr(dgeTestes[, grep("MBS", dgeTestes$samples$group)], min.count = count.cutoff)
+  keep_KN <- filterByExpr(dgeTestes[, grep("KN", dgeTestes$samples$group)], min.count = count.cutoff)
+  keep <- keep_MBS & keep_KN
+  
+  dge_name <- dge_name[keep, keep.lib.sizes=FALSE]
+  dge_name <- calcNormFactors(dge_name, method = norm.method)
+}
+
+# set up testes DGE object
+dgeTestes <- DGEList(count_data_testes, 
+                     genes=annotations, 
+                     group=metadata_testes$comp)
+
+print(paste("testes expressed genes (no cutoffs):", nrow(dgeTestes), sep = " "))
+
+# filter DGEs with genes meeting minimum requirements using normalize_dge function defined above
+dgeTestes <- normalize_dge(dgeTestes)
+
+# print expressed genes for each DGE- post filter
+print(paste("testes expressed genes (with filter):", nrow(dgeTestes), sep = " "))
+
+# save files to export
+write.csv(edgeR::cpm(dgeTestes, log = TRUE, prior.count=1, normalized.lib.sizes=TRUE), file = "exported_files/testes_cpm_norm_counts.csv")
+write.csv(rpkm(dgeTestes, normalized.lib.sizes = TRUE, log = TRUE), file = "exported_files/testes_rpkm_norm_counts.csv")
+write.csv(dgeTestes$genes$GeneID, file = "exported_files/genes_expressed_in_testes.csv",
+          row.names = FALSE, quote = FALSE)
+
+# create rpkm and cpm dataframes of expressed genes for later visualization
+testes_rpkm <- data.frame(rpkm(dgeTestes, normalized.lib.sizes = TRUE, log = TRUE))
+testes_rpkm$gene_name <- rownames(testes_rpkm)
+testes_rpkm_long <- data.frame(pivot_longer(testes_rpkm, 
+                                            cols = 1:(dim(testes_rpkm)[2]-1),
+                                            names_to = "mouse_id",
+                                            values_to = "rpkm"))
+testes_rpkm_long <- merge(testes_rpkm_long, metadata, 
+                          by = intersect(colnames(testes_rpkm_long),
+                                         colnames(metadata)))
+testes_rpkm_long$comp <- factor(testes_rpkm_long$comp, 
+                                levels = combinations)
+
+# create rpkm and cpm dataframes of expressed genes for later visualization
+testes_decostand <- decostand(as.data.frame(rpkm(dgeTestes, normalized.lib.sizes = TRUE)), "normalize")
+testes_decostand$gene_name <- rownames(testes_rpkm)
+testes_decostand_long <- data.frame(pivot_longer(testes_decostand, 
+                                                 cols = 1:(dim(testes_decostand)[2]-1),
+                                                 names_to = "mouse_id",
+                                                 values_to = "rpkm"))
+testes_decostand_long <- merge(testes_decostand_long, metadata, 
+                               by = intersect(colnames(testes_decostand_long),
+                                              colnames(metadata)))
+testes_decostand_long$comp <- factor(testes_decostand_long$comp, 
+                                     levels = combinations)
+
+# cpm
+testes_cpm <- data.frame(cpm(dgeTestes, normalized.lib.sizes = TRUE, log = TRUE))
+testes_cpm$gene_name <- rownames(testes_cpm)
+testes_cpm_long <- data.frame(pivot_longer(testes_cpm, 
+                                           cols = 1:(dim(testes_cpm)[2]-1),
+                                           names_to = "mouse_id",
+                                           values_to = "cpm"))
+testes_cpm_long <- merge(testes_cpm_long, metadata, 
+                         by = intersect(colnames(testes_cpm_long),
+                                        colnames(metadata)))
+testes_cpm_long$comp <- factor(testes_cpm_long$comp, 
+                               levels = combinations)
+
+# merge with phenotype data for later plotting
+testes_rpkm_long <- merge(testes_rpkm_long, phenotypes, by = intersect(colnames(testes_rpkm_long), colnames(phenotypes)), all = TRUE)
+testes_cpm_long <- merge(testes_cpm_long, phenotypes, by = intersect(colnames(testes_cpm_long), colnames(phenotypes)), all = TRUE)
+```
+
+<h1>MDS Plots</h1>
+<h3>MDS Plots of each dataset</h3>
+```{r mds-plots-testes}
+# set MDS plotting parameters
+c_value <- 2
+l_value <- 1
+t_value <- 1000
+mds_point_size <- 2.5
+
+# run MDS on normalized expression data
+testes_MDS <- plotMDS(dgeTestes, top = t_value, lwd = l_value, plot = FALSE)
+
+testes_mds_values <- data.frame(mouse_id = rownames(testes_MDS$distance.matrix.squared), 
+                                MDS_x = testes_MDS$x, 
+                                MDS_y = testes_MDS$y)
+testes_mds_values <- merge(testes_mds_values, phenotypes, by = "mouse_id")
+
+# visualize MDS plot by strain x hypoxic exposure
+testes_mds_by_acclimation <- ggplot(testes_mds_values, aes(x= MDS_x, y = MDS_y, fill=comp)) +
+  geom_point(size = mds_point_size, stroke = 0.5, pch = 21) +
+  scale_fill_manual(values=all_combo_colors) +
+  
+  labs(x= paste("MDS dim 1 (", 
+                round(100*testes_MDS$var.explained[1], 1) ,"%)", sep = ""),
+       y= paste("MDS dim 2 (", 
+                round(100*testes_MDS$var.explained[2], 1) ,"%)", sep = ""),) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        legend.position = "none")
+
+# visualized MDS plot by fertility
+testes_mds_by_fertility <- ggplot(testes_mds_values, aes(x= MDS_x, y = MDS_y,
+                                                         fill= Normalized_Sperm_Count, 
+                                                         , group = strain)) +
+  stat_ellipse(data = subset(testes_mds_values, testes_mds_values$strain == "KN"), geom = "polygon",
+               fill = all_combo_colors[c("KN_2day")], alpha = 0.6) +
+  stat_ellipse(data = subset(testes_mds_values, testes_mds_values$strain == "MBS"), geom = "polygon",
+               fill = all_combo_colors[c("MBS_2day")], alpha = 0.6) +
+  geom_point(size = mds_point_size, stroke = 0.5, pch = 21) +
+  
+  scale_fill_distiller(palette = "Greys", direction = 1, limits = c(0, 10000)) +
+  labs(x= paste("MDS dim 1 (",
+                round(100*testes_MDS$var.explained[1], 1) ,"%)", sep = ""),
+       y= paste("MDS dim 2 (",
+                round(100*testes_MDS$var.explained[2], 1) ,"%)", sep = ""),) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        legend.position = "bottom")
+
+# combine plots
+testes_mds_combined_plots <- plot_grid(testes_mds_by_acclimation, testes_mds_by_fertility,
+                                       nrow = 1, align = "vh")
+
+testes_mds_combined_plots
+
+ggsave("exported_figures/spermoxia_testes_mds_plots.pdf", testes_mds_combined_plots, width = 10, height = 3)
+
+# assess correlation between MDS1 & 2 and normalized sperm count for MBS
+testes_mds_values_MBS_only <- testes_mds_values[testes_mds_values$strain == "MBS",]
+
+# MDS 1
+testes_mds_x_cor <- cor.test(testes_mds_values_MBS_only$MDS_x, 
+                             testes_mds_values_MBS_only$Normalized_Sperm_Count, 
+                             method = "pearson")
+
+paste("MDS 1 & NSC: r = ",
+      round(testes_mds_x_cor$estimate, 3),
+      "; p = ",
+      round(testes_mds_x_cor$p.value, 3),
+      sep = "")
+
+# MDS 2
+testes_mds_y_cor <- cor.test(testes_mds_values_MBS_only$MDS_y, 
+                             testes_mds_values_MBS_only$Normalized_Sperm_Count, 
+                             method = "pearson")
+
+paste("MDS 2 & NSC: r = ",
+      round(testes_mds_y_cor$estimate, 3),
+      "; p = ",
+      round(testes_mds_y_cor$p.value, 3),
+      sep = "")
+```
+
+<h1>Differential Expression Testes</h1>
+<h3>Design set-up</h3>
+```{r de-design-matrix}
+#organizing metadata factors
+metadata_testes$acclimation <- factor(metadata_testes$acclimation, levels = acclimations)
+metadata_testes$strain <- factor(metadata_testes$strain, levels = strains)
+
+#set up differential expression experimental design and contrasts
+design <- metadata_testes[,c("mouse_id", "strain", "acclimation", "comp")]
+design$comp <- factor(design$comp)
+
+design_matrix_Testes <- model.matrix(~strain*acclimation, data=metadata_testes)
+rownames(design_matrix_Testes) <- design$mouse_id
+```
+
+```{r Testes-edgeR-DE-run}
+#run edgeR on Testes data; doesn't account for the severe LN family effects so ultimately, proceed with the dream analysis below
+#fit Genewise Negative Binomial Generalized Linear Models with Quasi-Dispersion Estimation to the Testes data
+Testes_model_fit <- glmQLFit(dgeTestes, design_matrix_Testes)
+plotQLDisp(Testes_model_fit)
+fdr_cutoff <- 0.05
+logFC_cutoff <- 1
+
+#retrieve DE genes
+#make a data frame that lists all the different factors that you could retrieve DE genes for and then the simpler name you want to refer to them by
+factors_of_interest <- data.frame(factor_names = c("strainMBS",
+                                                   "acclimation2day",
+                                                   "acclimation2wk",
+                                                   "acclimation6wk",
+                                                   "strainMBS:acclimation2day",
+                                                   "strainMBS:acclimation2wk",
+                                                   "strainMBS:acclimation6wk"),
+                                  coefficient_names =
+                                    colnames(design_matrix_Testes)[-1])
+
+retrieve_edgeR_DE_genes <- function(example_factor_name, example_coefficient_name){
+  #run the QLF test on the given coefficient of interest
+  example_QLF_test <- glmQLFTest(Testes_model_fit, 
+                                 coef=grep(paste("^", example_coefficient_name, "$", sep = ""), colnames(design_matrix_Testes))) 
+  
+  topTags(example_QLF_test)
+  example_DEs_Testes <- data.frame(topTags(example_QLF_test, n=dim(dgeTestes$counts)[1]))
+  example_DEs_Testes$effect <- example_factor_name
+  
+  #logFC cutoff
+  logFC_column_number <- grep("logFC", colnames(example_DEs_Testes))
+  example_DEs_Testes <- example_DEs_Testes[abs(example_DEs_Testes[,logFC_column_number]) > logFC_cutoff,]
+  
+  if(dim(subset(example_DEs_Testes, FDR < fdr_cutoff))[1] > 0){
+    #restrict to only significant DEs, if they exist
+    example_DEs_Testes_sig <- subset(example_DEs_Testes, FDR < fdr_cutoff)
+    example_DEs_Testes_sig$gene_ID <- rownames(example_DEs_Testes_sig)
+    
+    #restrict only to relevant columns so they can be bound with rbind later
+    example_DEs_Testes_sig <- example_DEs_Testes_sig[c(1, logFC_column_number,
+                                                       (length(colnames(example_DEs_Testes_sig))-3):
+                                                         length(colnames(example_DEs_Testes_sig)))]
+    
+    #rename logFC column so it's consistent across QLF tests
+    colnames(example_DEs_Testes_sig) <- gsub("logFC.*", "logFC", colnames(example_DEs_Testes_sig))
+    
+    print(paste("There are ", dim(example_DEs_Testes_sig)[1], 
+                " genes that are significantly DE due to ", 
+                example_factor_name, sep = ""
+    ))
+    write.csv(example_DEs_Testes_sig, file=paste("exported_files/EdgeR_DE_Testes_", 
+                                                 example_factor_name, 
+                                                 ".csv", 
+                                                 sep = ""))
+    
+    #assign the example DE object to the specific DE object
+    assign(paste(example_factor_name, "_edgeR_DEs_Testes_sig", sep = ""),
+           example_DEs_Testes_sig,
+           envir = .GlobalEnv)
+    
+    #return the list of DE genes
+    return(example_DEs_Testes_sig)
+  }
+}
+
+#run the retrieve DE genes function on all factors of interest
+#creates objects ending in "edgeR_DEs_Testes_sig"
+invisible(mapply(retrieve_edgeR_DE_genes,
+                 factors_of_interest[,1],
+                 factors_of_interest[,2]))
+
+#bind _DEs_Testes_sig objects together for supplemental table S1
+possible_edgeR_df <- grep("Testes", ls(pattern = "edgeR.*_sig"), value = TRUE, ignore.case = TRUE)
+
+options(make.row.names = TRUE)
+table_edgeR_DEs <- do.call(rbind, lapply(possible_edgeR_df, function(x)
+  if(exists(x, .GlobalEnv)) get(x) else NULL))
+
+#add annotation if genes are important in HIF cascade or catecholamine synthesis and secretion
+schweizer_genes <- read.csv("reference_files/schweizer_2019_catecholamine_genes.csv", header = TRUE)
+hif_genes <- schweizer_genes[schweizer_genes$Candidate.Set == "HIF",]
+catecholamine_genes <- schweizer_genes[schweizer_genes$Candidate.Set == "Catecholamine",]
+
+table_edgeR_DEs$HIF_gene <- NA
+table_edgeR_DEs$HIF_gene <- table_edgeR_DEs$gene_ID %in% hif_genes$Gene
+
+table_edgeR_DEs$cat_gene <- NA
+table_edgeR_DEs$cat_gene <- table_edgeR_DEs$gene_ID %in% catecholamine_genes$Gene
+
+# add annotation if genes are previously-identified pbs outliers
+pbs_outliers <- read.csv("reference_files/Wilsterman_2023_PBS_outliers.csv")
+pbs_outliers <- pbs_outliers$gene_symbol_pman
+pbs_outliers_expressed <- pbs_outliers[pbs_outliers %in% rownames(testes_cpm)]
+
+table_edgeR_DEs$pbs_outlier <- NA
+table_edgeR_DEs$pbs_outlier <- table_edgeR_DEs$gene_ID %in% pbs_outliers
+
+#formatting DE gene table for export
+table_edgeR_DEs_formatted <- table_edgeR_DEs
+table_edgeR_DEs_formatted <- table_edgeR_DEs_formatted[,!colnames(table_edgeR_DEs_formatted) %in% c("refseq_accession", "HIF_gene", "cat_gene")]
+table_edgeR_DEs_formatted <- table_edgeR_DEs_formatted[,c("gene_ID", "pbs_outlier", "effect", 
+                                                          "logFC", "PValue", "FDR")]
+table_edgeR_DEs_formatted$logFC <- round(table_edgeR_DEs_formatted$logFC, 2)
+table_edgeR_DEs_formatted$PValue <- formatC(table_edgeR_DEs_formatted$PValue, format = "e", digits = 2)
+table_edgeR_DEs_formatted$FDR <- formatC(table_edgeR_DEs_formatted$FDR, format = "e", digits = 2)
+
+
+#write combined DE lists out to file to generate Table S8
+write.csv(table_edgeR_DEs_formatted, file="exported_files/Table_S8_edgeR_DE_Testes_all_factors.csv", 
+          row.names = FALSE)
+```
+
+
+```{r gProfileR-DE}
+#get_go_edgeR_subsets function tests DE genes for each main effect DE gene set for GO enrichment
+get_go_edgeR_subsets <- function(effect) {
+  #retrieve genes belonging to specific DE term
+  effect_genes <- table_edgeR_DEs[table_edgeR_DEs$effect == effect,]$gene_ID
+  
+  go_terms_effect_df <- gost(query = effect_genes, 
+                             organism = "pmbairdii", 
+                             multi_query = FALSE, significant = TRUE,  
+                             user_threshold = 0.05, correction_method = "g_SCS", 
+                             domain_scope = "custom", custom_bg = dgeTestes$genes$GeneID, 
+                             numeric_ns = "", as_short_link = FALSE, highlight = TRUE,
+                             evcodes = TRUE, sources = c("GO:BP", "GO:MF", "GO:CC"))
+  
+  assign(paste("go_terms", effect, "df", sep = "_"), go_terms_effect_df, envir = .GlobalEnv)
+  
+  if(sum(go_terms_effect_df$result$significant == TRUE) == 0) {
+    return(paste("There are no significant GO terms for ", 
+                 effect," effect", sep = ""))
+  } else {
+    return(paste("There are ", sum(go_terms_effect_df$result$significant == TRUE),
+                 "significant GO terms for ", effect," effect", sep = ""))
+  }
+}
+
+go_results_edgeR <- lapply(unique(table_edgeR_DEs$effect), get_go_edgeR_subsets)
+
+#test if genes expressed in the testes and also PBS outliers are enriched for any GO terms
+go_terms_PBS_DEs_df <- gost(query = dgeTestes$genes$GeneID[dgeTestes$genes$GeneID %in% pbs_outliers], 
+                            organism = "pmbairdii", 
+                            multi_query = FALSE, significant = TRUE,  
+                            user_threshold = 0.05, correction_method = "g_SCS", 
+                            domain_scope = "custom", custom_bg = dgeTestes$genes$GeneID, 
+                            numeric_ns = "", as_short_link = FALSE, highlight = FALSE,
+                            evcodes = TRUE, sources = c("GO:BP", "GO:MF", "GO:CC"))
+
+
+# exporting strainMBS go terms for supplemental Table S9
+strain_MBS_GO_terms_formatted <- go_terms_strainMBS_df$result
+
+#calculate the fold enrichment for each term based on genome-wide expectations
+strain_MBS_GO_terms_formatted$exp <- strain_MBS_GO_terms_formatted$query_size*
+  (strain_MBS_GO_terms_formatted$term_size/strain_MBS_GO_terms_formatted$effective_domain_size)
+strain_MBS_GO_terms_formatted$fold.enrichment <- strain_MBS_GO_terms_formatted$intersection_size/strain_MBS_GO_terms_formatted$exp
+
+strain_MBS_GO_terms_formatted <- strain_MBS_GO_terms_formatted[,c("term_name", 
+                                                                  "p_value", 
+                                                                  "highlighted", 
+                                                                  "fold.enrichment", 
+                                                                  "source", 
+                                                                  "term_id", 
+                                                                  "term_size", 
+                                                                  "query_size", 
+                                                                  "intersection_size",
+                                                                  "intersection")]
+strain_MBS_GO_terms_formatted$p_value <- formatC(strain_MBS_GO_terms_formatted$p_value, format = "e", digits = 2)
+strain_MBS_GO_terms_formatted$fold.enrichment <- round(strain_MBS_GO_terms_formatted$fold.enrichment, 2)
+
+#write combined DE lists out to file to generate Table S9
+write.csv(strain_MBS_GO_terms_formatted, file="exported_files/strain_MBS_GO_terms_formatted.csv", 
+          row.names = FALSE)
+
+# plot GO enrichment for strain-specific DE genes for table S4
+source_colors <- c("#BCB6B3", "#776E69", "#191716")
+names(source_colors) <- c("GO:BP", "GO:CC", "GO:MF")
+
+strain_MBS_GO_terms_plot <- ggplot(
+  data = strain_MBS_GO_terms_formatted,
+  aes(x = fold.enrichment, y = reorder(term_name, fold.enrichment),
+      size = intersection_size, fill = source)) +
+  geom_point(pch = 21) +
+  scale_y_discrete(position = "right") +
+  scale_fill_manual(values = source_colors[names(source_colors) %in% unique(strain_MBS_GO_terms_formatted$source)]) +
+  theme_minimal() +
+  scale_size_continuous(name = "# Genes",
+                        breaks = seq(0, 400, 50),
+                        range = c(2, 6)) +
+  theme(axis.text.y = element_text(hjust = 0),
+        axis.title.y = element_blank(),
+        axis.title.x = element_blank())
+
+strain_MBS_GO_terms_plot
+
+ggsave("exported_figures/figure_s4_strain_MBS_GO_terms_plot.pdf",
+       strain_MBS_GO_terms_plot,
+       width = 6,
+       height = 2)
+```
+
+```{r pbs-outliers}
+#test if PBS outliers are enriched in strain-specific DE genes
+pbs_outliers_DE <- strainMBS_edgeR_DEs_Testes_sig[strainMBS_edgeR_DEs_Testes_sig$gene_ID %in%
+                                                    pbs_outliers_expressed,]
+go_terms_pbs_df <- gost(query = pbs_outliers_DE$gene_ID, 
+                        organism = "pmbairdii", 
+                        multi_query = FALSE, significant = FALSE,  
+                        user_threshold = 0.05, correction_method = "g_SCS", 
+                        domain_scope = "custom", 
+                        custom_bg = strainMBS_edgeR_DEs_Testes_sig$gene_ID, 
+                        numeric_ns = "", as_short_link = FALSE, highlight = TRUE,
+                        evcodes = TRUE, sources = c("GO:BP", "GO:MF", "GO:CC"))
+
+#test if there are more or less PBS outliers in the DE gene set than expected by chance
+# total genes
+N <- length(rownames(dgeTestes$genes))
+# number of expressed PBS outliers
+K <- length(pbs_outliers_expressed)
+# number of DE genes
+n <- length(strainMBS_edgeR_DEs_Testes_sig$gene_ID)
+# observed overlap
+x <- sum(strainMBS_edgeR_DEs_Testes_sig$gene_ID %in%
+           pbs_outliers_expressed)                
+
+# probability that there are fewer PBS outliers in the DE gene set than expected
+p_depletion <- phyper(x, K, N - K, n)
+p_depletion
+
+# expected overlap
+cat("N:", N, "\n",
+    "K:", K, "\n",
+    "n:", n, "\n",
+    "x:", x, "\n",
+    "expected overlap:", n * K / N, "\n")
+```
+
+```{r Testes-WGCNA-expression-setup}
+#examine individual genes and individual samples and remove outliers before building gene network
+#create transposed expression data frame
+testes_cpm <- read.csv(file = "exported_files/testes_cpm_norm_counts.csv", row.names = 1)
+testes_expr_filtered <- data.frame(t(testes_cpm[,grep("testes", colnames(testes_cpm))]))
+
+#This function checks data for missing entries, entries with weights below a threshold, and zero-variance genes, and returns a list of samples and genes that pass criteria on maximum number of missing or low weight values. In the example, all genes and all samples pass this quality check
+gsg <- goodSamplesGenes(testes_expr_filtered, verbose = 3)
+
+#lets you know if every gene/individual passes filter; everything does but the removal of offender genes/individuals is below
+gsg$allOK
+
+#if not all genes and samples pass the criteria, remove them
+if (!gsg$allOK) {
+  # Optionally, print the gene and sample names that were removed:
+  if (sum(!gsg$goodGenes) > 0)
+    printFlush(paste("Removing genes:", paste(names(testes_expr_filtered)[!gsg$goodGenes], collapse = ", ")))
+  if (sum(!gsg$goodSamples) > 0)
+    printFlush(paste("Removing samples:", paste(rownames(testes_expr_filtered)[!gsg$goodSamples], collapse = ", ")))
+  # Remove the offending genes and samples from the data:
+  testes_expr_filtered <- testes_expr_filtered[gsg$goodSamples, gsg$goodGenes]
+}
+
+#when all genes and samples pass the criteria, keep them in the filtered expression object
+if (gsg$allOK) {
+  testes_expr_filtered <- testes_expr_filtered
+}
+
+#clustering samples to look for outliers
+sampleTree = hclust(dist(testes_expr_filtered), method = "average")
+
+# Plot the sample tree: Open a graphic output window of size 12 by 9 inches
+# The user should change the dimensions if the window is too large or too small.
+sizeGrWindow(12,9)
+
+pdf(file = "exported_figures/testes_sample_clustering.pdf", width = 12, height = 9)
+
+par(cex = 0.6)
+
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "testes sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5,
+     cex.axis = 1.5, cex.main = 2)
+dev.off()
+
+par(cex = 0.6)
+
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "testes sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5,
+     cex.axis = 1.5, cex.main = 2)
+```
+
+```{r WGCNA-choose-beta-and-construct-network}
+# Choose a set of soft-threshold powers for WGCNA
+# only choose once so set run_WGCNA <- TRUE for first time use
+if(run_WGCNA) {
+  # test a wide range of beta values
+  powers <- c(c(1:10), seq(12, 20, 2))
+  
+  soft_threshold_testes <- pickSoftThreshold(testes_expr_filtered, 
+                                             powerVector = powers, 
+                                             verbose = 5)
+  
+  # plot the scale free and topology and mean connectivity for each beta value to choose best
+  scale_free_topology_plot <- ggplot(soft_threshold_testes$fitIndices, aes(x = Power, y = SFT.R.sq, bel = Power)) +
+    geom_text(size = 5, color = MBS_Control_color, aes(label = Power)) + 
+    geom_hline(yintercept = 0.93, color = MBS_Control_color) +
+    theme_classic() +
+    labs(x="Soft Threshold (power)", y="Scale Free Topology Model Fit,signed R^2")
+  
+  mean_connectivity_plot <- ggplot(soft_threshold_testes$fitIndices, aes(x = Power, y = mean.k., bel = Power)) +
+    geom_text(size = 5, color = MBS_Control_color, aes(label = Power)) + 
+    theme_classic() +
+    labs(x="Soft Threshold (power)", y="Mean Connectivity")
+  
+  print(plot_grid(scale_free_topology_plot,
+                  mean_connectivity_plot,
+                  nrow = 1, align = "v"))
+  
+  #plot of beta values; save to pdf
+  ggsave("exported_figures/rv_beta_plot_testes.pdf",   
+         plot_grid(scale_free_topology_plot,
+                   mean_connectivity_plot,
+                   nrow = 1, align = "v"),
+         height = 4, width = 7)
+  
+} else {
+  print("Using a previously generated WGCNA network")
+}
+```
+
+```{r WGCNA-network-construction}
+# construct gene network; only run once because there is randomness in network construction
+# set run_WGCNA <- TRUE for first time use
+if(run_WGCNA){
+  cor <- WGCNA::cor
+  
+  #build blockwise modules
+  testes_network <- blockwiseModules(testes_expr_filtered, 
+                                     power = 8, 
+                                     maxBlockSize = dim(testes_expr_filtered)[2],
+                                     TOMType = "signed", 
+                                     networkType = "signed", 
+                                     minModuleSize = 30,
+                                     reassignThreshold = 0, 
+                                     mergeCutHeight = 0.20,
+                                     numericLabels = TRUE, 
+                                     pamRespectsDendro = FALSE,
+                                     saveTOMs = TRUE,
+                                     saveTOMFileBase = "exported_files/ExprTOM_testes",
+                                     verbose = 3)
+  save(testes_network,file = "exported_files/spermoxia_testes_Network.RData")
+} else { 
+  load(file = "exported_files/spermoxia_testes_Network.RData") #load saved Network file
+}
+
+#assign modules to color labels; should have seven modules including gray
+table(testes_network$colors)
+testes_module_labels <- testes_network$colors
+testes_module_colors <- labels2colors(testes_network$colors)
+table(testes_module_colors)
+dim(table(testes_module_colors))
+
+testes_module_color_info <- data.frame(table(testes_module_colors))
+testes_module_color_info$number <- rownames(testes_module_color_info)
+color_convert <- testes_module_color_info[c("testes_module_colors", "number")]
+colnames(color_convert) <- c("color", "number")
+
+#To quantify co-expression similarity of entire modules, we calculate their eigengenes and cluster them on their correlation:
+#define the MEs present in testes
+testes_MEs <- moduleEigengenes(testes_expr_filtered, testes_module_colors)$eigengenes
+testes_MEs <- orderMEs(testes_MEs) #the rownames of this dataset are equal to Expr
+
+#calculate intra-module connectivity for each gene
+testes_kME <- signedKME(testes_expr_filtered, testes_MEs)
+
+# Calculate dissimilarity of module eigengenes
+testes_ME_dissimilarity <- 1-cor(testes_MEs);
+# Cluster module eigengenes
+testes_ME_tree <- hclust(as.dist(testes_ME_dissimilarity), method = "average");
+# Plot the result
+sizeGrWindow(7, 6)
+plot(testes_ME_tree, main = "Clustering of module eigengenes", xlab = "", sub = "")
+
+write.csv(testes_module_color_info,
+          file="exported_files/testes_module_table.csv",
+          row.names = FALSE)
+
+write.csv(color_convert,
+          file="exported_files/testes_color_convert.csv",
+          row.names = FALSE)
+
+#number of genes assigned to modules
+length(testes_module_colors)
+dim(table(testes_module_colors))
+
+#plot module dendograms
+testes_gene_tree <- testes_network$dendrograms[[1]]
+
+# open a graphics window
+sizeGrWindow(12, 9)
+# Convert labels to colors for plotting
+mergedColors <- labels2colors(testes_network$colors)
+# Plot the dendrogram and the module colors underneath
+plotDendroAndColors(testes_network$dendrograms[[1]], mergedColors[testes_network$blockGenes[[1]]],
+                    "Module colors",
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05)
+```
+
+```{r WGCNA-trait-module-associations-NSC}
+# perform Trait Module Associations
+#perform analysis of Normalized_Sperm_Count data for all individuals sequenced for at least one trait; then restrict to testes only samples
+#refine trait list to those of interest then omit NA individuals
+testes_trait_data_NSC <- phenotypes
+testes_trait_data_NSC <- testes_trait_data_NSC[!is.na(testes_trait_data_NSC$Normalized_Sperm_Count),]
+
+testes_trait_data_NSC <- phenotypes[,c("mouse_id", "Normalized_Sperm_Count")]
+rownames(testes_trait_data_NSC) <- testes_trait_data_NSC$mouse_id
+
+# Define numbers of genes and samples
+nGenes <- ncol(testes_expr_filtered)
+nSamples <- nrow(testes_expr_filtered)
+
+#define the MEs present in testes
+testes_MEs <- moduleEigengenes(testes_expr_filtered, testes_module_colors)$eigengenes
+testes_MEs <- orderMEs(testes_MEs) #the rownames of this dataset are equal to Expr
+
+#merge the MEs with the trait data and then sample info for correlations
+#first the trait data
+testes_MEs_wtrait_data_NSC <- merge(testes_MEs, phenotypes, by.x = 0, by.y = "mouse_id", all.y = TRUE)
+rownames(testes_MEs_wtrait_data_NSC) <- testes_MEs_wtrait_data_NSC$Row.names
+
+#reformat from wide to long
+testes_MEs_wtrait_data_NSC_long <- pivot_longer(testes_MEs_wtrait_data_NSC, 
+                                                col = grep("^ME", colnames(testes_MEs_wtrait_data_NSC)),
+                                                names_to = "module", values_to = "ME")
+testes_MEs_wtrait_data_NSC_long$module <- gsub("^ME", "", testes_MEs_wtrait_data_NSC_long$module)
+testes_MEs_wtrait_data_NSC_long$group <- factor(testes_MEs_wtrait_data_NSC_long$comp,
+                                                levels = combinations)
+
+#export table of module eigengene x normalize sperm count correlations
+write.csv(testes_MEs_wtrait_data_NSC_long, 
+          file = "exported_files/testes_module_eigengenes_NSC.csv", row.names = FALSE)
+
+#run the trait correlations
+testes_MEs_wtrait_data_NSC <- testes_MEs_wtrait_data_NSC[,grep("grey", colnames(testes_MEs_wtrait_data_NSC), invert = TRUE)]
+testes_ME_trait_correlations_NSC <- round(cor(testes_MEs_wtrait_data_NSC[,grep("^ME", colnames(testes_MEs_wtrait_data_NSC))], 
+                                              testes_MEs_wtrait_data_NSC[,grep("Normalized_Sperm_Count", colnames(testes_MEs_wtrait_data_NSC))], 
+                                              use = "p"), 3)
+testes_module_trait_pValues_NSC <- round(corPvalueStudent(testes_ME_trait_correlations_NSC, nSamples), 3)
+testes_module_trait_fdr_NSC <- as.data.frame(p.adjust(testes_module_trait_pValues_NSC[,1], method="fdr"))
+testes_NSC_trait_cor <- cbind(testes_module_trait_pValues_NSC, testes_module_trait_fdr_NSC)
+colnames(testes_NSC_trait_cor) <- c("p-value", "q-value")
+
+#determine which modules have significant trait correlations
+sig_testes_trait_modules_NSC <- testes_module_trait_pValues_NSC[apply(testes_module_trait_pValues_NSC, MARGIN = 1, function(x) any(x <= 0.05)), ]
+sig_testes_trait_modules_NSC <- data.frame(sig_testes_trait_modules_NSC)
+write.csv(sig_testes_trait_modules_NSC, file="exported_files/testes_module_trait_correlation_NSC.csv")
+
+#pull out modules with significant correlations
+correlated_mods_NSC <- sig_testes_trait_modules_NSC[sig_testes_trait_modules_NSC$Normalized_Sperm_Count <= 0.05,]
+correlated_mods_pearson_NSC <- testes_ME_trait_correlations_NSC[rownames(testes_ME_trait_correlations_NSC) %in%
+                                                                  rownames(correlated_mods_NSC),]
+#combine pearson's r with p-values
+correlated_mods_table_NSC <- cbind(testes_ME_trait_correlations_NSC,
+                                   testes_NSC_trait_cor)
+colnames(correlated_mods_table_NSC) <- c("r", "p-value", "q-value")
+rownames(correlated_mods_table_NSC) <- gsub("^ME", "", rownames(correlated_mods_table_NSC))
+
+#convert modules names from colors to numbers using existing table
+color_convert <- read.csv("exported_files/testes_color_convert.csv")
+correlated_mods_table_NSC <- merge(correlated_mods_table_NSC,
+                                   color_convert, 
+                                   by.x=0,
+                                   by.y="color")
+
+#reorder by module number then export all modules
+correlated_mods_table_NSC <- correlated_mods_table_NSC[order(correlated_mods_table_NSC$number),]
+colnames(correlated_mods_table_NSC) <- gsub("Row.names", "module", colnames(correlated_mods_table_NSC))
+write.csv(correlated_mods_table_NSC, "exported_files/testes_wgcna_correlation_table_all_NSC.csv", row.names = FALSE)
+```
+
+```{r lmer-on-module-eigengenes}
+#test for associations between treatments and module eigengenes with lms
+# module membership info
+gene_module_membership <- data.frame(cor(testes_expr_filtered, testes_MEs, use = "p"))
+module_membership_pvalues <- data.frame(corPvalueStudent(as.matrix(gene_module_membership), nSamples));
+colnames(gene_module_membership) <- gsub("ME", "MM.", colnames(gene_module_membership))
+colnames(module_membership_pvalues) <- paste("ME", "p.MM.", colnames(module_membership_pvalues))
+
+#make summary dataframe for each gene and it's module info
+gene_info_testes <- data.frame(Gene = names(testes_expr_filtered),
+                               moduleColor = testes_module_colors,
+                               moduleLabel = testes_module_labels,
+                               gene_module_membership,
+                               module_membership_pvalues)
+
+#export table
+write.csv(gene_info_testes, file="exported_files/gene_info_testes.csv")
+
+# subset by module
+subset_gene_info <- function(which_module) {
+  tmp_color_df <- subset(gene_info_testes, moduleColor == which_module)
+  assign(paste(which_module, "df", sep = "_"), tmp_color_df, envir = .GlobalEnv)
+  
+}
+invisible(lapply(unique(gene_info_testes$moduleColor), subset_gene_info))
+
+#make a list of all genes included in the testes WGCNA analysis
+testes_wgcna_genes <- names(testes_expr_filtered)
+
+# LMER on module eigengenes
+# run linear mixed effects module on module eigen genes and the associated experimental factors
+testes_lmer_model <- lapply(
+  split(testes_MEs_wtrait_data_NSC_long[testes_MEs_wtrait_data_NSC_long$module != "grey",],
+        testes_MEs_wtrait_data_NSC_long[testes_MEs_wtrait_data_NSC_long$module != "grey",]$module),
+  function(df) {
+    df <- droplevels(df)
+    lmer(ME ~ strain * acclimation + (1 | strain:family),
+         data = df)
+  }
+)
+#run the summary function on all of the lmers; output anova table from model results
+testes_lmer_model_summaries <- lapply(testes_lmer_model, summary)
+
+#create a dataframe of the pvalues resulting from the lmer tests on all modules
+testes_lmer_model_pvalues <- data.frame()
+
+for(module_color in names(testes_lmer_model_summaries)){
+  lmer_pvalues <- testes_lmer_model_summaries[[which(names(testes_lmer_model_summaries) %in% module_color)]]$coefficients[,5]
+  lmer_pvalues <- data.frame(t(lmer_pvalues))
+  colnames(lmer_pvalues) <- c("Intercept",
+                              "strainMBS",
+                              "acclimation2day",
+                              "acclimation2wk",
+                              "acclimation6wk",
+                              "strainMBS:acclimation2day",
+                              "strainMBS:acclimation2wk",
+                              "strainMBS:acclimation6wk")
+  rownames(lmer_pvalues) <- module_color
+  lmer_pvalues$module <- module_color
+  testes_lmer_model_pvalues <- rbind(testes_lmer_model_pvalues, lmer_pvalues)
+}
+
+#remove intercept column
+testes_lmer_model_pvalues <- testes_lmer_model_pvalues[,-1]
+
+#reformat to long version
+testes_lmer_model_pvalues_long <- pivot_longer(testes_lmer_model_pvalues, 
+                                               col = grep("module",
+                                                          colnames(testes_lmer_model_pvalues),
+                                                          invert = TRUE),
+                                               names_to = "comparison",
+                                               values_to = "pvalue")
+
+#convert modules names from colors to numbers using existing table from above
+testes_lmer_model_pvalues_long <- merge(color_convert, 
+                                        testes_lmer_model_pvalues_long, 
+                                        by.x="color", 
+                                        by.y="module")
+colnames(testes_lmer_model_pvalues_long) <- gsub("color", "module", colnames(testes_lmer_model_pvalues_long))
+
+lmer_effect_parsing <- function(comparison, coefficient_name) {
+  subset_testes_lmer_pvalues <- testes_lmer_model_pvalues_long[testes_lmer_model_pvalues_long$comparison == coefficient_name,]
+  subset_testes_lmer_pvalues$fdr <- p.adjust(subset_testes_lmer_pvalues$pvalue, method="fdr")
+  subset_sig_testes_modules <- data.frame(subset(subset_testes_lmer_pvalues, pvalue <= 0.05))
+  dim(subset_sig_testes_modules)
+  subset_sig_testes_modules$module <- gsub("^ME", "", subset_sig_testes_modules$module)
+  write.table(subset_sig_testes_modules, 
+              file=paste("exported_files/testes_module_lmer_significant_modules_", 
+                         comparison, ".txt", sep = ""), 
+              col.names=FALSE, row.names=FALSE, quote=FALSE)
+  assign(paste(comparison, "_sig_testes_modules_df", sep = ""),
+         subset_sig_testes_modules, envir = .GlobalEnv)
+  return(paste("There are ", 
+               dim(subset_sig_testes_modules)[[1]], 
+               " modules significant for the ", 
+               comparison, 
+               " effect", 
+               sep = ""))
+}
+
+#retrieve modules that have significant effects in response to the experimental variables after FDR correction and create dataframe objects of the significant modules
+mapply(lmer_effect_parsing,
+       factors_of_interest[,1],
+       factors_of_interest[,2])
+
+#bind all the significant module dataframes together
+options(make.row.names = TRUE)
+all_significant_testes_modules <- do.call(rbind, lapply(ls(pattern = "_sig_testes_modules_df"),
+                                                        function(x) 
+                                                          if(exists(x, .GlobalEnv)) get(x) else NULL))
+all_fdr_testes_modules <- subset(all_significant_testes_modules, pvalue<=0.05)
+
+
+#export table of modules with significant strain, hypoxic exposure, or strain x hypoxic exposure effects
+write.csv(all_fdr_testes_modules, "exported_files/testes_lmer_modules.sig.csv")
+
+#plot module eigengene by treatment for all modules
+all_module_eigengenes_plot <- 
+  ggplot(testes_MEs_wtrait_data_NSC_long, 
+         aes(x = comp, y = ME, color = comp, fill = comp)) + 
+  geom_violin(trim=FALSE, aes(fill = comp), color = "black") +
+  geom_boxplot(fill="white", color = "black", alpha=0.75, width=0.1, outlier.shape = NA)+
+  xlab("strain x acclimation treatment") +
+  ylab("Module eigengene") +
+  scale_fill_manual(values = all_combo_colors) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
+  facet_wrap(~ module, nrow = 2)
+
+#plot module eigengene by treatment for significant modules
+significant_module_eigengenes_plot <- 
+  ggplot(testes_MEs_wtrait_data_NSC_long[testes_MEs_wtrait_data_NSC_long$module %in%
+                                           all_significant_testes_modules[all_significant_testes_modules$pvalue 
+                                                                          <= 0.05,]$module,], 
+         aes(x = comp, y = ME, color = comp, fill = comp)) + 
+  geom_violin(trim=FALSE, aes(fill = comp), color = "black") +
+  geom_boxplot(fill="white", color = "black", alpha=0.75, width=0.1, outlier.shape = NA)+
+  xlab("strain x acclimation treatment") +
+  ylab("Module eigengene") +
+  scale_fill_manual(values = all_combo_colors) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
+  facet_wrap(~ module, nrow = 2)
+
+#plot module eigengene by NSC for all modules
+all_module_eigengenes_NSC_plot <- 
+  ggplot(testes_MEs_wtrait_data_NSC_long, 
+         aes(x = Normalized_Sperm_Count, y = ME, color = comp, fill = comp)) + 
+  geom_point() +
+  xlab("Normalized sperm count (x 10^6)") +
+  ylab("Module eigengene") +
+  scale_color_manual(values = all_combo_colors) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
+  facet_wrap(strain ~ module, nrow = 2)
+
+#plot module eigengene by NSC for significant modules
+significant_module_eigengenes_NSC_plot <- 
+  ggplot(testes_MEs_wtrait_data_NSC_long[testes_MEs_wtrait_data_NSC_long$module %in%
+                                           correlated_mods_table_NSC[correlated_mods_table_NSC$`q-value` 
+                                                                     <= 0.06,]$module,], 
+         aes(x = Normalized_Sperm_Count, y = ME, color = comp, fill = comp)) + 
+  geom_point() +
+  xlab("Normalized sperm count (x 10^6)") +
+  ylab("Module eigengene") +
+  scale_color_manual(values = all_combo_colors) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "none") +
+  facet_wrap(strain ~ module, nrow = 2)
+
+try(ggsave("exported_figures/testes_significantly_correlated_module_eigengenes.pdf", significant_module_eigengenes_plot, height = 7, width = 10))
+ggsave("exported_figures/testes_all_module_eigengenes.pdf", all_module_eigengenes_plot, height = 7, width = 10)
+ggsave("exported_figures/testes_significant_module_eigengenes_NSC_plot.pdf", significant_module_eigengenes_NSC_plot, height = 7, width = 10)
+ggsave("exported_figures/testes_all_module_eigengenes_NSC_plot.pdf", all_module_eigengenes_NSC_plot, height = 7, width = 10)
+
+try(print(significant_module_eigengenes_plot), silent = TRUE)
+all_module_eigengenes_plot
+significant_module_eigengenes_NSC_plot
+all_module_eigengenes_NSC_plot
+
+testes_MEs_wtrait_data_NSC_long$strain <- factor(testes_MEs_wtrait_data_NSC_long$strain, levels = strains)
+testes_MEs_wtrait_data_NSC_long$acclimation <- factor(testes_MEs_wtrait_data_NSC_long$acclimation, levels = acclimations)
+
+# convert module eigengene dataframe into a summarized format with mean and SEM for plotting
+final_module_set <- unique(all_significant_testes_modules$module, correlated_mods_table_NSC$module)
+
+testes_MEs_summarized <- testes_MEs_wtrait_data_NSC_long %>%
+  filter(module %in% final_module_set) %>%
+  group_by(strain, acclimation, module) %>%
+  dplyr::summarize(
+    mean_ME = mean(ME, na.rm = TRUE),
+    sem_ME  = sd(ME, na.rm = TRUE) / sqrt(sum(!is.na(ME))),
+    .groups = "drop"
+  )
+
+# convert p values to symbols for plotting
+get_sig_effects_label <- function(which_module, alpha = 0.05) {
+  coefs <- as.data.frame(testes_lmer_model_summaries[[which_module]]$coefficients)
+  coefs$term <- rownames(coefs)
+  
+  sig_terms <- coefs %>%
+    filter(term != "(Intercept)", `Pr(>|t|)` < alpha) %>%
+    mutate(stars = case_when(
+      `Pr(>|t|)` < 0.001 ~ "***",
+      `Pr(>|t|)` < 0.01  ~ "**",
+      `Pr(>|t|)` < 0.05  ~ "*",
+      TRUE ~ ""
+    ),
+    label = paste0(term, ": p = ", signif(`Pr(>|t|)`, 2), stars))
+  
+  if (nrow(sig_terms) == 0) {
+    return("No significant effects")
+  }
+  
+  sig_terms$label <- gsub("MBS:", " x ", sig_terms$label)
+  sig_terms$label <- gsub("acclimation", "", sig_terms$label)
+  sig_terms$label <- gsub("wk", " week exposure", sig_terms$label)
+  paste(sig_terms$label, collapse = "\n")
+}
+
+# for each module of interest, plot the mean and SEM expression across groups
+make_module_eigengene_plot <- function(which_module) {
+  sig_label <- get_sig_effects_label(which_module)
+  
+  ggplot(testes_MEs_wtrait_data_NSC_long %>%
+           filter(module %in% which_module), 
+         aes(x = acclimation, y = ME, color = strain, fill = strain)) + 
+    geom_boxplot(width=.4, position = position_dodge(0.75), linewidth = 0.6, outliers = FALSE, alpha = 0.4, notch = FALSE, aes(color = strain)) +
+    geom_point(position = position_dodge(width = 0.75), alpha = 0.3, 
+               size = 2, fill = NA) +
+    annotate("text", x = -Inf, y = Inf, label = sig_label,
+             hjust = -0.05, vjust = 1.2, size = 3, fontface = "italic") +
+    xlab("Hypoxia exposure") +
+    ylab(paste(which_module, " module eigengene", sep = "")) +
+    scale_color_manual(values = c(MBS = "#254869", KN = "#8e260b")) +
+    scale_fill_manual(values = c(MBS = "#254869", KN = "#8e260b")) +
+    scale_x_discrete(labels = c("Control" = "0 days", "2day" = "2 days",
+                                "2wk" = "2 weeks", "6wk" = "6 weeks")) +
+    ylim(min(testes_MEs_wtrait_data_NSC_long %>% filter(module %in% which_module) %>% select(ME)) -  0.1,
+         max(testes_MEs_wtrait_data_NSC_long %>% filter(module %in% which_module) %>% select(ME)) + 0.2) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          plot.title = element_text(hjust = 0.5),
+          legend.position = "none",
+          axis.title.x = element_blank())
+  
+}
+
+module_eigengene_plot_list <- lapply(final_module_set, make_module_eigengene_plot)
+names(module_eigengene_plot_list) <- module_eigengene_plot_list
+
+#combine module plots into a multipanel figure
+module_eigengene_plot <- plot_grid(plotlist = module_eigengene_plot_list,
+                                   nrow = length(module_eigengene_plot_list),
+                                   align = "vh")
+
+ggsave("exported_figures/testes_modules_of_interest_plot.pdf", module_eigengene_plot, width = 8, height = 8)
+```
+
+```{r gProfileR-modules}
+# a function to test if each module is enriched for any GO terms
+get_go_module_subsets <- function(color) {
+  #retrieve genes belonging to specific module
+  tmp_color_df <- subset(gene_info_testes, moduleColor == color)
+  assign(paste(color, "df", sep = "_"), tmp_color_df, envir = .GlobalEnv)
+  
+  go_terms_color_df <- gost(query = tmp_color_df$Gene, 
+                            organism = "pmbairdii", 
+                            multi_query = FALSE, significant = TRUE,  
+                            user_threshold = 0.05, correction_method = "g_SCS", 
+                            domain_scope = "custom", custom_bg = testes_wgcna_genes, 
+                            numeric_ns = "", as_short_link = FALSE, highlight = TRUE,
+                            evcodes = TRUE, sources = c("GO:BP", "GO:MF", "GO:CC"))
+  
+  assign(paste("go_terms",color, "df", sep = "_"), go_terms_color_df, envir = .GlobalEnv)
+  
+  # if there are no significant GO terms, return negative statement
+  if(sum(go_terms_color_df$result$significant == TRUE) == 0) {
+    return(paste("There are no significant GO terms for ", 
+                 color," module", sep = ""))
+  } else {
+    # if there are signficiant GO terms, calculate the fold enrichment and save to df
+    go_terms_color_df_results <- go_terms_color_df$result
+    go_terms_color_df_results$exp <- go_terms_color_df_results$query_size*
+      (go_terms_color_df_results$term_size/go_terms_color_df_results$effective_domain_size)
+    go_terms_color_df_results$fold.enrichment <- go_terms_color_df_results$intersection_size/go_terms_color_df_results$exp
+    
+    assign(paste("go_terms",color, "results_df", sep = "_"), go_terms_color_df_results, envir = .GlobalEnv)
+    
+    return(paste("There are ", sum(go_terms_color_df$result$significant == TRUE),
+                 "significant GO terms for ", color," module", sep = ""))
+  }
+}
+
+invisible(lapply(unique(testes_module_colors), get_go_module_subsets))
+
+#for each module, make a plot of the significant GO terms by fold.enrichment and gene number
+make_module_GO_plot <- function(which_module) {
+  which_results_df <- get(paste0("go_terms_", which_module, "_results_df"))
+  
+  ggplot(
+    data = which_results_df[which_results_df$highlighted, ],
+    aes(x = fold.enrichment, y = reorder(term_name, fold.enrichment),
+        size = intersection_size, fill = source)) +
+    geom_point(pch = 21) +
+    scale_y_discrete(position = "right") +
+    scale_fill_manual(values = source_colors[names(source_colors) %in% unique(which_results_df$source)]) +
+    theme_minimal() +
+    scale_size_continuous(name = "# Genes",
+                          breaks = seq(0, 2000, 250),
+                          range = c(2, 6)) +
+    theme(axis.text.y = element_text(hjust = 0),
+          axis.title.y = element_blank(),
+          axis.title.x = element_blank())
+}
+
+module_GO_plot_list <- lapply(final_module_set, make_module_GO_plot)
+names(module_GO_plot_list) <- final_module_set
+
+merged_module_plot_list <- as.list(rbind(module_eigengene_plot_list, module_GO_plot_list))
+
+#combine module eigengene plots across groups with GO enrichment
+module_GO_plots <- plot_grid(plot_grid(plotlist = module_eigengene_plot_list,
+                                       nrow = length(module_eigengene_plot_list),
+                                       labels = c("A", "C", "E"),
+                                       align = "vh"),
+                             plot_grid(plotlist = module_GO_plot_list,
+                                       nrow = length(module_GO_plot_list),
+                                       labels = c("B", "D", "F"),
+                                       align = "vh"),
+                             rel_widths = c(1.5, 3))
+
+module_GO_plots
+
+#export figure 4
+ggsave(filename = "exported_figures/testes_GO_plot_enrichment_grid.pdf", 
+       module_GO_plots, width = 10, height = 7)
+```
+
+
+```{r individual-gene-inquiry}
+#a vector of genes whose expression across treatments you want to visualize as in Figure S5
+which_genes <- c("Epas1", "Hif1a", "Vegfa", "Vegfb", "Vegfc", "Vegfd", "Faslg")
+
+# for each gene
+for (gene in which_genes) {
+  print(gene)
+  
+  #search each set of differentially expressed genes
+  for (de_list in ls(pattern = "_DEs_Testes_sig")) {
+    example_de_list <- get(de_list)
+    
+    #and if that gene is in the list, print which one and it's FDR
+    if(sum(rownames(example_de_list) %in% gene) > 0) {
+      print(de_list)
+      print(example_de_list[rownames(example_de_list) %in% gene,]$logFC)
+    }
+  }
+}
+
+#generate a plot of decostand normalized expression for each sample across groups
+gene_of_interest_boxplot <- ggplot(testes_decostand_long[testes_decostand_long$gene_name %in% which_genes,],
+                                   aes(x = comp, y = rpkm, color = comp, fill = comp)) +
+  #geom_violin(trim=FALSE, aes(fill = comp), color = "black", scale = "width") +
+  geom_boxplot(color = "black", alpha=0.75, width=0.4, outlier.shape = NA)+
+  xlab("Strain and acclimation treatment") +
+  ylab("Expression (normalized FPKM)") +
+  scale_fill_manual(values = all_combo_colors) +
+  scale_x_discrete(labels = c(
+    "KN_Control" = "KN: 0 days",
+    "KN_2day" = "KN: 2 days",
+    "KN_2wk" = "KN: 2 weeks",
+    "KN_6wk" = "KN: 6 weeks",
+    "MBS_Control" = "MBS: 0 days",
+    "MBS_2day" = "MBS: 2 days",
+    "MBS_2wk" = "MBS 2 weeks",
+    "MBS_6wk" = "MBS 6 weeks"
+  )) +
+  theme_bw() +
+  facet_grid( ~ gene_name, scales = "fixed") +
+  #ggtitle(paste(which_gene, " expression (normalized rpkm)", sep = "")) +
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust=1))
+
+gene_of_interest_boxplot
+
+ggsave(filename = "exported_figures/figure_s5_testes_genes_of_interest_boxplots.pdf", gene_of_interest_boxplot, width = 8, height = 4)
+```
+
+
+```{r apopotosis}
+# investigate if apopotosis genes have a universal shift in expression in any treatment
+apoptosis_parent_ID <- "GO:0006915"
+#negative_apoptosis <- "GO:0043066"
+#positive_apoptosis <- "GO:0043065"
+
+#get the child terms for the chosen GO term
+descendants <- as.list(GOBPOFFSPRING)[[apoptosis_parent_ID]]  # all child terms in Biological Process ontology
+all_ids <- unique(c(apoptosis_parent_ID, descendants))
+
+#fetch apoptosis gene metadata
+apoptosis_genes <- AnnotationDbi::select(
+  org.Mm.eg.db,
+  keys    = all_ids,
+  columns = c("SYMBOL", "ENTREZID", "GENENAME"),
+  keytype = "GO"
+)
+
+apoptosis_genes <- unique(apoptosis_genes[, c("SYMBOL", "ENTREZID", "GENENAME")])
+colnames(apoptosis_genes) <- c("GeneID", "ENTREZID", "GENENAME")
+
+print(paste("Genes under GO:0006915 (apoptotic process) and descendants:",
+            nrow(apoptosis_genes), sep = " "))
+
+print(paste("Of these,", sum(rownames(dgeTestes) %in% apoptosis_genes$GeneID),
+            "are expressed in the dataset"), sep = "")
+
+#testing for shifts in expression across groups
+fdr_cutoff <- 0.05
+logFC_cutoff <- 0
+
+# get a vector of the group each sample belongs to
+sample_group <- factor(dgeTestes$samples$group,
+                       levels = c("KN_Control", "KN_2day", "KN_2wk", "KN_6wk",
+                                  "MBS_Control", "MBS_2day", "MBS_2wk", "MBS_6wk"))
+
+#make a new differential expression design matrix to test if apoptosis changes across hypoxia exposure /within/ each strain
+design_group <- model.matrix(~ 0 + sample_group)
+colnames(design_group) <- levels(sample_group)
+
+dgeTestes <- estimateDisp(dgeTestes, design_group)
+Testes_model_fit <- glmQLFit(dgeTestes, design_group)
+
+cons <- makeContrasts(
+  KN_2day_vs_Ctrl  = KN_2day  - KN_Control,
+  KN_2wk_vs_Ctrl   = KN_2wk   - KN_Control,
+  KN_6wk_vs_Ctrl   = KN_6wk   - KN_Control,
+  MBS_2day_vs_Ctrl = MBS_2day - MBS_Control,
+  MBS_2wk_vs_Ctrl  = MBS_2wk  - MBS_Control,
+  MBS_6wk_vs_Ctrl  = MBS_6wk  - MBS_Control,
+  levels = design_group)
+
+#identify specific apoptosis genes differentially expressed in pairwise contrasts
+retrieve_apoptosis_DE_genes <- function(group1, group2, gene_set = apoptosis_genes$GeneID,
+                                        fit = Testes_model_fit, design = design_group) {
+  comparison <- paste0(group1, "_vs_", group2)
+  con <- makeContrasts(contrasts = paste0(group1, "-", group2), levels = design)
+  qlf <- glmQLFTest(fit, contrast = con)
+  
+  res <- topTags(qlf, n = Inf, sort.by = "none")$table
+  res <- res[rownames(res) %in% gene_set, ]
+  res$FDR_set <- p.adjust(res$PValue, method = "BH")
+  res$comparison <- comparison
+  res$gene_ID <- rownames(res)
+  
+  sig <- res[res$FDR_set < fdr_cutoff & abs(res$logFC) > logFC_cutoff, ]
+  message(nrow(sig), " apoptosis genes significantly DE in ", comparison)
+  invisible(list(all = res, sig = sig))
+}
+
+#run function to identify specific apoptosis DE genes; there are none
+comparisons <- list(
+  c("KN_2day", "KN_Control"), c("KN_2wk", "KN_Control"), c("KN_6wk", "KN_Control"),
+  c("MBS_2day", "MBS_Control"), c("MBS_2wk", "MBS_Control"), c("MBS_6wk", "MBS_Control"))
+all_results <- lapply(comparisons, function(p) retrieve_apoptosis_DE_genes(p[1], p[2]))
+names(all_results) <- sapply(comparisons, paste, collapse = "_vs_")
+
+# start fry comparisons
+idx <- which(rownames(dgeTestes) %in% apoptosis_genes$GeneID)
+length(idx)
+
+# use camera to assess if the apoptosis gene set has a shift in expression in response to hypoxia exposure relative to strain-specific controls
+comp_test <- function(n, r = 0.01) {
+  qlf <- glmQLFTest(Testes_model_fit, contrast = cons[, n])
+  tt <- topTags(qlf, n = Inf, sort.by = "none")$table
+  z <- setNames(sign(tt$logFC) * qnorm(tt$PValue / 2, lower.tail = FALSE), rownames(tt))
+  cameraPR(z, list(apoptosis = which(rownames(tt) %in% apoptosis_genes$GeneID)), inter.gene.cor = r)
+}
+camera_out <- do.call(rbind, lapply(colnames(cons), function(n) cbind(contrast = n, comp_test(n))))
+camera_out$FDR <- p.adjust(camera_out$PValue, "fdr")
+camera_out
+
+sapply(c(0, 0.01, 0.05), function(r) comp_test("MBS_2wk_vs_Ctrl", r)$PValue)
+
+#calculate the shift in expression as measured by logFC relative to 0 days
+apoptosis_expression_shift <- function(which_contrast) {
+  qlf <- glmQLFTest(Testes_model_fit, contrast = cons[, which_contrast])
+  tt <- topTags(qlf, n = Inf, sort.by = "none")$table
+  ins <- rownames(tt) %in% apoptosis_genes$GeneID
+  print(c(mean_logFC_set = mean(tt$logFC[ins]), mean_logFC_background = mean(tt$logFC[!ins]),
+          pct_up_set = mean(tt$logFC[ins] > 0)))
+  return(data.frame(gene = rownames(tt[ins,]),
+                    contrast = which_contrast,
+                    logFC = tt[ins,]$logFC))
+}
+
+#format apoptosis logFCs
+apoptosis_logFC_list <- lapply(colnames(cons), apoptosis_expression_shift)
+apoptosis_logFC_df <- do.call(rbind, apoptosis_logFC_list)
+apoptosis_logFC_df$contrast <- gsub("_vs_Ctrl", "", apoptosis_logFC_df$contrast)
+apoptosis_logFC_df <- apoptosis_logFC_df %>% 
+  separate(col = 2, into = c("strain", "acclimation"),
+           sep = "_", remove = FALSE)
+
+#calculate summary stats for apoptosis analysis for plotting
+apoptosis_summary_df <- apoptosis_logFC_df %>%
+  group_by(contrast) %>%
+  dplyr::summarize(
+    mean_logFC = mean(logFC, na.rm = TRUE),
+    up_logFC = sum(logFC > 0, na.rm = TRUE),
+    down_logFC = sum(logFC < 0, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+apoptosis_summary_df$percent_up <- 100*(apoptosis_summary_df$up_logFC /
+                                          (apoptosis_summary_df$up_logFC +
+                                             apoptosis_summary_df$down_logFC ))
+
+apoptosis_summary_df$percent_down <- 100*(apoptosis_summary_df$down_logFC /
+                                            (apoptosis_summary_df$up_logFC +
+                                               apoptosis_summary_df$down_logFC ))
+
+camera_out$contrast <- gsub("_vs_Ctrl", "", camera_out$contrast)
+apoptosis_summary_df <- merge(apoptosis_summary_df, camera_out, by = "contrast")
+
+head(apoptosis_logFC_df)
+apoptosis_summary_df$label <- paste(paste("% up: ",
+                                          round(apoptosis_summary_df$percent_up,1),
+                                          sep = ""),
+                                    paste("p = ",
+                                          round(apoptosis_summary_df$FDR,2),
+                                          sep = ""),
+                                    sep = "\n")
+
+#plot shifts in apoptosis expression across hypoxia exposure groups
+apoptosis_summary_df <- apoptosis_summary_df %>% 
+  separate(col = 1, into = c("strain", "acclimation"),
+           sep = "_", remove = FALSE)
+
+apoptosis_logFC_df$contrast <- factor(apoptosis_logFC_df$contrast,
+                                      levels = combinations)
+
+apoptosis_plot_by_acclimation_combined <- ggplot(apoptosis_logFC_df, aes(x = acclimation, y = logFC, color = contrast)) +
+  geom_violin(trim=FALSE, aes(fill = contrast), color = "black") +
+  geom_boxplot(fill="white", color = "black", alpha=0.75, width=0.1, outlier.shape = NA) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  xlab("Hypoxia exposure") +
+  ylab("Expression shift (logFC)") +
+  geom_text(
+    data = apoptosis_summary_df,
+    aes(x = acclimation, y = Inf, label = label),
+    inherit.aes = FALSE,
+    hjust = 0.5, vjust = 1.3,
+    size = 2.8,
+    lineheight = 0.9
+  ) +
+  facet_wrap(~ strain) +
+  scale_fill_manual(values = all_combo_colors[names(all_combo_colors) %in% unique(apoptosis_logFC_df$contrast)]) +
+  scale_x_discrete(labels = c("2 days",
+                              "2 weeks", 
+                              "6 weeks")) + 
+  ylim(min(apoptosis_logFC_df$logFC) - 0.5, max(apoptosis_logFC_df$logFC) + 0.75) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "right",
+        strip.background = element_rect(fill = "white", color = "black"))
+
+```
+
+```{r hub-genes}
+# this function assesses which genes are in the top 1% and 5% of intramodule connectivity (kME) for each module to identify "hub" genes
+get_hub_genes <- function(which_module) {
+  module_df <- get(paste(which_module, "df", sep = "_"))
+  
+  colname_mm <- grep(paste("MM.",which_module, sep = ""), colnames(module_df), value = TRUE)
+  
+  module_mm <- module_df[,c("Gene", "moduleColor", colname_mm)]
+  
+  #set the threshold cutoffs
+  module_hub_genes_cutoff_1 <- quantile(module_mm[,colname_mm], 0.99)  # top 1%
+  module_hub_genes_cutoff_5 <- quantile(module_mm[,colname_mm], 0.95)  # top 5%
+  
+  #get gene ids
+  module_hub_genes_top_1 <- module_mm[module_mm[,colname_mm] >= module_hub_genes_cutoff_1,]$Gene
+  module_hub_genes_top_5 <- module_mm[module_mm[,colname_mm] >= module_hub_genes_cutoff_5,]$Gene
+  
+  # assess if hub genes are pbs outliers
+  module_top_1_pbs_outliers <- pbs_outliers[pbs_outliers %in% module_hub_genes_top_1]
+  module_top_5_pbs_outliers <- pbs_outliers[pbs_outliers %in% module_hub_genes_top_5]
+  
+  #write out hub genes to dfs
+  assign(paste(which_module, "_hub_genes_top_1", sep = ""), module_hub_genes_top_1, envir = .GlobalEnv)
+  assign(paste(which_module, "_hub_genes_top_5", sep = ""), module_hub_genes_top_5, envir = .GlobalEnv)
+  
+  assign(paste(which_module, "_top_1_pbs_outliers", sep = ""), module_top_1_pbs_outliers, envir = .GlobalEnv)
+  assign(paste(which_module, "_top_5_pbs_outliers", sep = ""), module_top_5_pbs_outliers, envir = .GlobalEnv)
+  
+  #for each module, print the module name and who the hub genes are that are also pbs outliers
+  print(which_module)
+  print(module_top_5_pbs_outliers)
+  
+  #report if this module contains Hif1a or Epas1
+  if("Hif1a" %in% module_hub_genes_top_5) {
+    print(paste("Hif1a is a hub gene in the ", which_module, " module", sep = ""))
+  }
+  
+  if("Epas1" %in% module_hub_genes_top_5) {
+    print(paste("Epas1 is a hub gene in the ", which_module, " module", sep = ""))
+  }
+}
+
+invisible(lapply(testes_module_color_info$testes_module_colors, get_hub_genes))
+
+# get hub genes for the modules deemed significant for NSC or strain, hypoxia exposure, or strain x hypoxia exposure
+interesting_top_5_pbs_outliers <- lapply(paste(
+  unique(all_significant_testes_modules$module), 
+  "_top_5_pbs_outliers", sep = ""), get)
+
+interesting_hub_genes_top_5 <- lapply(paste(
+  unique(all_significant_testes_modules$module), 
+  "_hub_genes_top_5", sep = ""), get)
+
+table_edgeR_DEs[table_edgeR_DEs$GeneID %in% interesting_top_5_pbs_outliers,]
+table_edgeR_DEs[table_edgeR_DEs$GeneID %in% interesting_hub_genes_top_5,]
+
+# combine both top_5_pbs_outliers and also hub_genes
+all_hub_gene_sets <- grep("interesting", ls(pattern = "hub_genes_top_5"), invert = TRUE, value = TRUE)
+
+# for each hub gene, build a dataframe containing the gene name, it's pbs status, and module kME
+get_hub_gene_list <- function(which_module) {
+  genes <- get(which_module)
+  module <- sub("_hub_genes_top_5$", "", which_module)  # extract "color" part
+  data.frame(gene = genes, module = module, pbs_outlier = genes %in% pbs_outliers,
+             kME = round(testes_kME[rownames(testes_kME) %in% genes, 
+                                    grep(module, colnames(testes_kME))], 3),
+             stringsAsFactors = FALSE)
+}
+
+module_hub_genes_df <- do.call(rbind, lapply(all_hub_gene_sets, get_hub_gene_list))
+rownames(module_hub_genes_df) <- NULL
+head(module_hub_genes_df)
+
+#export hub gene info for table S12
+write.csv(module_hub_genes_df, file = "exported_files/table_S12_module_hub_genes.csv",
+          row.names = FALSE, quote = FALSE)
+```
+
+```{r orthology-with-house-mouse}
+# get a list of ensembl orthologs between mouse and deer mouse; note that the genome versions do not exactly match the reference databases so orthologs may be lost because of that
+# uncomment below if running for the first time; otherwise, script uses a pre-existing ortholog map to avoid repeatedly querying ensembl
+
+# mouse_genes <- useEnsembl(biomart = "genes", dataset = "mmusculus_gene_ensembl", mirror = "useast")
+# 
+# attrs <- listAttributes(mouse_genes)
+# attrs[grepl("pmbairdii", attrs$name, ignore.case = TRUE), ]
+# 
+# ortholog_map <- getBM(
+#   attributes = c(
+#     "ensembl_gene_id",
+#     "external_gene_name",
+#     "pmbairdii_homolog_ensembl_gene",
+#     "pmbairdii_homolog_associated_gene_name",
+#     "pmbairdii_homolog_orthology_type",
+#     "pmbairdii_homolog_perc_id"
+#   ),
+#   filters = "ensembl_gene_id",
+#   values  = unique(induced_genes$gene),
+#   mart    = mouse_genes
+# )
+# 
+# write.csv(ortholog_map, "exported_files/ensembl_mouse_to_deer_mouse_orthologs.csv", row.names = FALSE)
+
+# import previously-existing ortholog map
+mouse_ortholog_df <- read.csv("exported_files/ensembl_mouse_to_deer_mouse_orthologs.csv", header = TRUE)
+
+# restrict to one-to-one orthologs
+mouse_ortholog_df <- mouse_ortholog_df[mouse_ortholog_df$pmbairdii_homolog_orthology_type == "ortholog_one2one",]
+```
+
+```{r green-deconvolution}
+#load here so the package specific functions don't override others in the above code
+suppressMessages(library(MuSiC)) # for in silico deconvolution
+suppressMessages(library(Biobase)) # for in silico deconvolution
+suppressMessages(library(SingleCellExperiment)) # for in silico deconvolution
+
+# in silico deconvolution of samples using reference house mouse scRNAseq from Green et al. 2018
+# import Green et al. data; folder does not contain these files due to GitHub size limits; user will need to download ST1-8
+dge_files <- list.files("reference_files/Green_GSE112393_samples", 
+                        pattern = "ST[0-9]_DGE\\.txt$", full.names = TRUE)
+sample_ids <- gsub("^GSM[0-9]+_([A-Z]+[0-9]+)_DGE\\.txt", "\\1", basename(dge_files))
+
+sapply(dge_files, function(f) names(data.table::fread(f, nrows = 0))[1])
+
+#read in Green samples as sparse matrices
+read_dge <- function(file) {
+  example <- data.table::fread(file, sep = "\t", header = TRUE)
+  sample_id <- gsub(".*/GSM[0-9]+_([A-Z]+[0-9]+)_DGE\\.txt", "\\1", file)
+  
+  gene_ids <- example[[1]]          # first column, whatever it's named
+  example[, 1] <- NULL              # drop it by position
+  
+  mat <- Matrix::Matrix(as.matrix(example), sparse = TRUE)
+  rm(example); gc()
+  
+  rownames(mat) <- gene_ids
+  colnames(mat) <- paste0(sample_id, "_", colnames(mat))
+  mat
+}
+
+dge_matrices <- lapply(dge_files, read_dge)
+
+# only keep genes in all ref samples
+gene_lists <- lapply(dge_matrices, rownames)
+all_genes <- Reduce(union, gene_lists)
+sapply(gene_lists, function(g) sum(duplicated(g)))
+
+# matrix formatting
+align_to_union <- function(mat, all_genes) {
+  triplet <- as(mat, "TsparseMatrix")           # extract (i, j, x) without densifying
+  new_i <- match(rownames(mat)[triplet@i + 1], all_genes)
+  Matrix::sparseMatrix(
+    i = new_i, j = triplet@j + 1, x = triplet@x,
+    dims = c(length(all_genes), ncol(mat)),
+    dimnames = list(all_genes, colnames(mat))
+  )
+}
+
+dge_matrices_aligned <- lapply(dge_matrices, align_to_union, all_genes = all_genes)
+sc_counts <- do.call(cbind, dge_matrices_aligned)
+
+message("Merged single-cell matrix: ", nrow(sc_counts), " genes x ", ncol(sc_counts), " cells")
+
+
+# assemble a SCE (single cell experiment) object for compatibilitiy with MuSiC
+cell_sample_ids <- rep(sample_ids, times = sapply(dge_matrices_aligned, ncol))
+
+col_data <- S4Vectors::DataFrame(
+  sample_id = cell_sample_ids,
+  row.names = colnames(sc_counts))
+
+row_data <- S4Vectors::DataFrame(
+  gene_id = rownames(sc_counts),
+  row.names = rownames(sc_counts)
+)
+
+sce <- SingleCellExperiment::SingleCellExperiment(
+  assays = list(counts = sc_counts),
+  colData = col_data,
+  rowData = row_data
+)
+sce
+
+#import the cell population assignments for each cell from Green et al. 2018
+attrs <- data.table::fread("reference_files/Green_GSE112393_samples/GSE112393_MergedAdultMouseST25_PerCellAttributes.txt")
+
+#check distribution of cells across the 8 scRNAseq ref samples
+sc_tab <- table(sub("_.*", "", colnames(sc_counts)))
+matched_tab <- table(sub("_.*", "", intersect(colnames(sc_counts), attrs[["#CellBarcode"]])))
+
+data.frame(
+  total = sc_tab,
+  matched = matched_tab[names(sc_tab)],
+  pct = round(100 * matched_tab[names(sc_tab)] / sc_tab, 1)
+)
+
+#filter SCE object
+ct_raw <- attrs[["CellType"]][match(colnames(sc_counts), attrs[["#CellBarcode"]])]
+table(is.na(ct_raw))
+#FALSE  TRUE 
+#15826 15402 
+
+keep <- !is.na(ct_raw)
+sce <- sce[, keep]
+sce$cellType <- factor(ct_raw[keep])
+
+
+# make a key to go from cell population number to the biological state they assigned the population
+cellType_key <- data.frame(num = seq(1, 11, 1),
+                           cellType = c(
+                             "InnateLymph",
+                             "Macrophage",
+                             "Endothelial",
+                             "Myoid",
+                             "Leydig",
+                             "Sertoli",
+                             "Unknown",
+                             "spermatogonia",
+                             "spermatocytes",
+                             "round_spermatids",
+                             "elongating_spermatids"))
+
+# factor and then report on number of cells in each population
+sce$cellType <- factor(
+  cellType_key$cellType[match(as.integer(as.character(sce$cellType)), cellType_key$num)],
+  levels = cellType_key$cellType
+)
+
+table(sce$cellType)
+
+# estimate cell type proportions with music
+Est.prop.testes <- music_prop(
+  bulk.mtx  = as.matrix(count_data_testes),
+  sc.sce    = sce,
+  clusters  = "cellType",
+  samples   = "sample_id",  
+  verbose   = TRUE
+)
+
+# visualize similarity of Green et al. clusters if any need to be condensed (we did not condense any for this analysis)
+testes.basis = music_basis(sce, clusters = 'cellType', samples = 'sample_id')
+
+# Plot the dendrogram of design matrix and cross-subject mean of realtive abundance
+par(mfrow = c(1, 2))
+d <- dist(t(log(testes.basis$Disgn.mtx + 1e-6)), method = "euclidean")
+# Hierarchical clustering using Complete Linkage
+hc1 <- hclust(d, method = "complete" )
+# Plot the obtained dendrogram
+plot(hc1, cex = 0.6, hang = -1, main = 'Cluster log(Design Matrix)')
+d <- dist(t(log(testes.basis$M.theta + 1e-8)), method = "euclidean")
+# Hierarchical clustering using Complete Linkage
+# hc2 <- hclust(d, method = "complete" )
+hc2 <- hclust(d, method = "complete")
+# Plot the obtained dendrogram
+plot(hc2, cex = 0.6, hang = -1, main = 'Cluster log(Mean of RA)')
+
+
+# make a dataframe of estimated cell type proportions for each population
+est_prop_long <- data.frame(Est.prop.testes$Est.prop.weighted)
+est_prop_long$mouse_id <- rownames(est_prop_long)
+est_prop_long <- pivot_longer(est_prop_long,
+                              cols = grep("mouse_id", colnames(est_prop_long), invert = TRUE),
+                              values_to = "proportion",
+                              names_to = "cell_type")
+est_prop_long <- merge(est_prop_long, phenotypes, by = "mouse_id")
+
+cell_type_order <- c("Sertoli",
+                     "spermatogonia",
+                     "spermatocytes",
+                     "round_spermatids",
+                     "elongating_spermatids",
+                     "Leydig",
+                     "InnateLymph",
+                     "Macrophage",
+                     "Endothelial",
+                     "Myoid",
+                     "Unknown")
+est_prop_long$cell_type <- factor(est_prop_long$cell_type, levels = rev(cell_type_order))
+
+# make summary df
+est_prop_long <- est_prop_long %>%
+  group_by(strain, acclimation) %>%
+  mutate(mouse_id = factor(mouse_id, levels = unique(mouse_id))) %>%
+  ungroup()
+
+# make a dataframe of estimated cell type proportions for each population as estimated by NNLS
+nnls_prop_long <- data.frame(Est.prop.testes$Est.prop.allgene)
+nnls_prop_long$mouse_id <- rownames(nnls_prop_long)
+nnls_prop_long <- pivot_longer(nnls_prop_long,
+                               cols = grep("mouse_id", colnames(nnls_prop_long), invert = TRUE),
+                               values_to = "nnls",
+                               names_to = "cell_type")
+nnls_prop_long <- merge(nnls_prop_long, phenotypes, by = "mouse_id")
+
+nnls_prop_long$cell_type <- factor(nnls_prop_long$cell_type, levels = rev(cell_type_order))
+
+#summary dataframe
+nnls_prop_long <- nnls_prop_long %>%
+  group_by(strain, acclimation) %>%
+  mutate(mouse_id = factor(mouse_id, levels = unique(mouse_id))) %>%
+  ungroup()
+
+
+#reorder phenotypes for plotting by normalized sperm count within each group
+phenotypes <- phenotypes %>%
+  mutate(
+    strain = factor(strain, levels = c("KN", "MBS")),
+    acclimation = factor(acclimation, levels = c("Control", "2day", "2wk", "6wk"))
+  ) %>%
+  arrange(strain, acclimation, desc(Normalized_Sperm_Count))
+
+heatmap_row_order <- phenotypes$mouse_id
+
+#create a vector of shades of brown for the heatmap
+browns_col_fun <- colorRamp2(seq(0, 1, length.out = length(browns)), browns)
+
+#create a heatmap for each group of the estimated cell type proportions from music
+comp_specific_music_heatmap <- function(which_comp) {
+  grep_pattern <- gsub("_", ".*", which_comp)
+  
+  example_music_heatmap <- Heatmap(as.matrix(Est.prop.testes$Est.prop.weighted
+                                             [grep(grep_pattern, 
+                                                   rownames(Est.prop.testes$Est.prop.weighted)),]), 
+                                   name = "Cell type proportion", 
+                                   column_order = cell_type_order[cell_type_order %in% colnames(Est.prop.testes$Est.prop.weighted)], 
+                                   row_order = grep(grep_pattern, heatmap_row_order, value = TRUE),
+                                   column_names_gp = gpar(fontsize=4), 
+                                   show_row_names = FALSE, 
+                                   col = browns_col_fun, 
+                                   show_row_dend = FALSE, 
+                                   cluster_columns = FALSE, 
+                                   use_raster = FALSE,
+                                   border = TRUE,
+                                   row_title = which_comp,
+                                   row_title_side = "left",
+                                   row_title_gp = gpar(fontsize = 10, fontface = "bold"),
+                                   row_title_rot = 90)
+}
+
+music_heatmap_list <- lapply(unique(phenotypes$comp), comp_specific_music_heatmap)
+
+#create a heatmap for each group of the estimated cell type proportions from NNLS
+comp_specific_nnls_heatmap <- function(which_comp) {
+  grep_pattern <- gsub("_", ".*", which_comp)
+  example_nnls_heatmap <- Heatmap(as.matrix(Est.prop.testes$Est.prop.allgene
+                                            [grep(grep_pattern, 
+                                                  rownames(Est.prop.testes$Est.prop.allgene)),]), 
+                                  name = "Cell type proportion", 
+                                  column_order = cell_type_order[cell_type_order %in% colnames(Est.prop.testes$Est.prop.allgene)], 
+                                  row_order = grep(grep_pattern, heatmap_row_order, value = TRUE),
+                                  column_names_gp = gpar(fontsize=4), 
+                                  show_row_names = FALSE, 
+                                  col = browns_col_fun, 
+                                  show_row_dend = FALSE, 
+                                  cluster_columns = FALSE, 
+                                  use_raster = FALSE,
+                                  border = TRUE,
+                                  row_title = which_comp,
+                                  row_title_side = "left",
+                                  row_title_gp = gpar(fontsize = 10, fontface = "bold"),
+                                  row_title_rot = 90)
+}
+
+
+nnls_heatmap_list <- lapply(unique(phenotypes$comp), comp_specific_nnls_heatmap)
+
+
+# get the actual heatmap objects using mget, then convert each to a grob
+music_heatmap_grobs <- lapply(music_heatmap_list, function(ht) {
+  grid.grabExpr(draw(ht))
+})
+
+nnls_heatmap_grobs <- lapply(nnls_heatmap_list, function(ht) {
+  grid.grabExpr(draw(ht))
+})
+
+# combine to make figure S3
+music_cell_type_heatmap <- plot_grid(plot_grid(plotlist = music_heatmap_grobs, ncol =1),
+                                     plot_grid(plotlist = nnls_heatmap_grobs, ncol =1),
+                                     labels = c("A", "B"),
+                                     ncol = 2)
+
+ggsave("exported_figures/figure_s3_cell_type_proportions.pdf",
+       music_cell_type_heatmap,
+       height = 12,
+       width = 10)
+```
+
+```{r cell-type-proportion-stats}
+# running beta regression on four cell types of interest to assess if their proportions are correlated with noramlized sperm count
+cell_types <- c("Sertoli", "spermatogonia", "spermatocytes", "elongating_spermatids")
+
+# rescale X (divide by 1000) so coefficients are readable and optimizer is stable
+est_prop_long <- est_prop_long %>%
+  mutate(Sperm_Count_k = Normalized_Sperm_Count / 1000)
+
+# Smithson & Verkuilen (2006) transformation; this is because some estimated cell type proportions are exactly zero which doesn't work with beta regression
+transform_prop <- function(y) {
+  n <- length(y)
+  (y * (n - 1) + 0.5) / n
+}
+
+#apply the transformation
+est_prop_long <- est_prop_long %>%
+  group_by(cell_type) %>%
+  mutate(proportion_adj = transform_prop(proportion)) %>%
+  ungroup()
+
+est_prop_long$cell_type <- factor(est_prop_long$cell_type,
+                                  levels = rev(cell_type_order))
+
+# refit all 4 cell population beta regression models with rescaled predictor
+models <- map(cell_types, function(ct) {
+  d <- est_prop_long[est_prop_long$cell_type == ct, ]
+  betareg(proportion_adj ~ Sperm_Count_k * strain, data = d)
+})
+names(models) <- cell_types
+
+# check convergence for all 4
+walk(cell_types, function(ct) {
+  cat(ct, "- converged:", models[[ct]]$converged, 
+      "| iterations:", models[[ct]]$optim$iterations %||% NA, "\n")
+})
+
+# create a summary results table with rescaled coefficients
+results_table <- map_dfr(cell_types, function(ct) {
+  s <- summary(models[[ct]])$coefficients$mean
+  data.frame(
+    cell_type = ct,
+    term      = rownames(s),
+    estimate  = s[, "Estimate"],
+    p_value   = s[, "Pr(>|z|)"],
+    row.names = NULL
+  )
+})
+
+results_table <- results_table %>%
+  group_by(term) %>%
+  mutate(p_adj = p.adjust(p_value, method = "BH")) %>%
+  ungroup()
+
+print(results_table)
+
+# reformat results table for easy plot labels 
+annot_df <- results_table %>%
+  filter(term %in% c("strainMBS", "Sperm_Count_k:strainMBS")) %>%
+  mutate(
+    sig = case_when(
+      p_adj < 0.001 ~ "***",
+      p_adj < 0.01  ~ "**",
+      p_adj < 0.05  ~ "*",
+      TRUE ~ "ns"
+    ),
+    term_label = case_when(
+      term == "strainMBS" ~ "Strain",
+      term == "Sperm_Count_k:strainMBS" ~ "Interaction"
+    ),
+    line = paste0(term_label, ": β = ", round(estimate, 2),
+                  ", p = ", formatC(p_adj, format = "e", digits = 1),
+                  " ", sig)
+  ) %>%
+  group_by(cell_type) %>%
+  summarise(label = paste(line, collapse = "\n"), .groups = "drop")
+
+# create summary plots for the four targetted cell populations of estimated proportion by normalized sperm count
+targeted_est_prop_long <- est_prop_long[est_prop_long$cell_type %in% cell_types,]
+targeted_est_prop_long$cell_type <- factor(targeted_est_prop_long$cell_type,
+                                           levels = cell_type_order)
+annot_df$cell_type <- factor(annot_df$cell_type,
+                             levels = cell_types)
+
+combined_cells_summary_plots <-
+  ggplot(targeted_est_prop_long, 
+         aes(x = Normalized_Sperm_Count, y = proportion_adj, color = comp)) +
+  geom_point() +
+  scale_color_manual(values = all_combo_colors) +
+  geom_text(
+    data = annot_df,
+    aes(x = -Inf, y = Inf, label = label),
+    inherit.aes = FALSE,
+    hjust = -0.05, vjust = 1.3,
+    size = 2.8,
+    lineheight = 0.9
+  ) +
+  facet_wrap(~ cell_type, nrow =1,
+             labeller = labeller(cell_type = c(
+               "Sertoli"               = "Sertoli",
+               "spermatogonia"         = "Spermatogonia",
+               "spermatocytes"         = "Spermatocytes",
+               "elongating_spermatids" = "Elongating spermatids"
+             ))) +
+  ylim(0,1) +
+  ylab("Cell type proportion") +
+  xlab("Sperm count (10e6)") +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(),
+        legend.position = "none",
+        strip.background = element_rect(fill = NA),
+        panel.spacing.x = unit(1, "lines"))
+```
+
+```{r cell-type-figure-combined}
+figure_3_cell_composition_plot <- plot_grid(plot_grid(testes_mds_by_acclimation,
+                                                      apoptosis_plot_by_acclimation_combined,
+                                                      labels = c("A", "B"),
+                                                      rel_widths = c(1, 2.5),
+                                                      nrow = 1),
+                                            combined_cells_summary_plots,
+                                            labels = c("", "C"),
+                                            nrow = 2)
+
+
+figure_3_cell_composition_plot
+
+ggsave(figure_3_cell_composition_plot, filename = "exported_figures/figure_3_cell_composition.pdf", width = 9, height = 5)
+```
+
+```{r extract R script}
+#knitr::purl("Deer_mouse_testes_RNASeq.Rmd")
+```

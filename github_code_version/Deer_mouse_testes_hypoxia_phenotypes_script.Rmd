@@ -1,0 +1,1068 @@
+---
+title: "Deer mouse male fertility phenotypes"
+output: html_document
+date: "13-Oct-2026"
+---
+
+```{r setup}
+library(ggplot2) #for data visualization
+library(ggsignif) #for adding stats to plots
+library(ggbeeswarm) #for data visualization
+library(FSA) #for dunn's test
+library(cowplot) #for arranging figures
+library(faraway) # for the hsb dataset
+library(MASS) # for negative binomial support
+library(ggplot2) # for plotting
+library(lme4) # for linear mixed effects models
+library(nlme) # for linear mixed effects models
+library(lmerTest) # for linear mixed effects models
+library(emmeans) # for linear mixed effects models
+library(corrplot) # for correlations
+library(Hmisc) # statistics
+library(tidyr) # for dataframe manipulation
+library(openxlsx) # for data table export
+library(car) # statistics
+library(performance) # statistics
+library(dplyr) # for dataframe manipulation
+library(lubridate) # for dataframe manipulation
+library(sf) # for spatial object manipulation
+library(raster) # raster manipulation
+library(geodata) # downloading world maps
+library(tigris) # retrieve sf for the contiguous us
+library(rmapshaper) # simplifying the contiguous us sf
+library(rnaturalearth) # for removing the great lakes
+library(ggpattern) # making object patterns for range overlap
+
+#set working directory
+knitr::opts_knit$set(root.dir = "/Users/kelsiehunnicutt/Library/CloudStorage/Dropbox-Personal/1_Work/Research/Spermoxia/github_code_version/")
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+
+getwd()
+unlink(".RData")
+options(scipen = 999)
+```
+
+```{r color definitions and basic functions}
+#a function to convert a vector from raw p-values to significance symbols
+sig_conversion <- function(misc_dataframe) {
+  triple <- misc_dataframe <= 0.001
+  double <- misc_dataframe >= 0.001 & misc_dataframe<0.01 
+  single <- misc_dataframe >= 0.01 & misc_dataframe<0.05 
+  nonsig <- misc_dataframe >= 0.05 
+  misc_dataframe[single] <- "*"
+  misc_dataframe[double] <- "**"
+  misc_dataframe[triple] <- "***"
+  misc_dataframe[nonsig] <- "n.s."
+  print(misc_dataframe)
+}
+
+# function to calculate SEM
+calculate_sem <- function(vector_of_interest) {
+  vector_of_interest_no_NAs <- na.omit(vector_of_interest)
+  sd(vector_of_interest_no_NAs)/sqrt(length((vector_of_interest_no_NAs)))
+}
+
+#set figure export dimensions
+half_plot_width <- 3.25
+full_plot_width <- 6.75
+half_plot_height <- 3
+full_plot_height <- 6
+
+# set paper wide colors
+all_pop_colors <- c(MBS = "#254869",
+                    SM = "#018394",
+                    LL = "#eca72c",
+                    KN = "#8e260b",
+                    BW = "#c65f20")
+
+MBS_control_color <- "#5DA6EA"
+MBS_2day_color    <- "#2688E3"
+MBS_2wk_color     <- "#135490"
+MBS_6wk_color     <- "#0D3B66"
+
+KN_control_color <- "#F95738"
+KN_2day_color    <- "#ED2E07"
+KN_2wk_color     <- "#C62606"
+KN_6wk_color     <- "#8B1B04"
+
+leu_color <- "#EEE7EC"
+man_color <- "#DBD0D7"
+
+# factor ordering
+strains <- c("BW", "LL", "KN", "MBS", "SM")
+acclimations <- c("Control", "2day", "2wk", "6wk")
+
+tmp_combinations <- crossing(strains, acclimations)
+treatments <- paste(tmp_combinations$strains, tmp_combinations$acclimations, sep = "_")
+#SM 2 weeks not actually done
+treatments <- treatments[!treatments %in% "SM_2wk"]
+```
+
+```{r import-phenotypes-from-focal-and-extended comparisons}
+# import phenotypes
+phenotypes <- read.csv(file = "reference_files/Peromyscus_acclimation_data_phenotypes_21Jul26.csv")
+keep_variables <- c("date", "acclimation", "mouse_id", "strain", "family", "indiv", "sex", "mass", "nose2base", "tail", "length", "rt.foot", "left.ear", "testis1", "testis2", "sv", "bat", "wat", "total_count", "rows_counted", "count_dilution", "avg_area_tubule",  "avg_diameterlong_tubule", "avg_diametershort_tubule", "avg_perimeter_tubule")
+phenotypes <- phenotypes[,colnames(phenotypes) %in% keep_variables]
+phenotypes$strain <- gsub("ME", "MBS", phenotypes$strain)
+phenotypes$mouse_id <- gsub("ME", "MBS", phenotypes$mouse_id)
+phenotypes$avg_area_tubule <- phenotypes$avg_area_tubule/1000000
+
+#remove females and individuals with collection issues
+phenotypes <- phenotypes[phenotypes$sex == "M",]
+premature_death <- c("MBS_F5_812_E")
+no_preweigh <- c("LL_01_15M")
+no_SV <- c("LL_01_73M", "SM_01_91M")
+
+#only one testis measured for this mouse; assume equal testis weight for RTW calculation
+only_one_testis <- c("SM_01_08M")
+phenotypes[phenotypes$mouse_id == only_one_testis,]$testis1 <- phenotypes[phenotypes$mouse_id == only_one_testis,]$testis2
+
+# remove individuals lacking either testis weight or SV weight
+#rm_individuals <- c(premature_death, no_preweigh, weird_KN, no_SV)
+rm_individuals <- c(premature_death, no_preweigh, no_SV)
+phenotypes <- phenotypes[!phenotypes$mouse_id %in% rm_individuals,]
+
+#calculate fertility metrics
+phenotypes$paired_TW <- (phenotypes$testis1 + phenotypes$testis2)
+
+phenotypes$RelativeTestesWeight <- ((100 * phenotypes$paired_TW) / 
+                                      phenotypes$mass )
+phenotypes$RelativeSVWeight <- ((100 * phenotypes$sv) / 
+                                  phenotypes$mass )
+phenotypes$Fat_Proportions <- ((100 * phenotypes$wat) / 
+                                 phenotypes$mass )
+phenotypes$Relative_Fat_Browness <- (phenotypes$bat) / 
+  (phenotypes$bat + phenotypes$wat)
+
+phenotypes$Normalized_Sperm_Count <- (phenotypes$total_count*((30+phenotypes$count_dilution)/30))/
+  phenotypes$row
+
+#add in metadata info
+phenotypes$acclimation <- gsub("3wk", "2wk", phenotypes$acclimation)
+phenotypes$acclimation <- gsub("2day ", "2day", phenotypes$acclimation)
+phenotypes$comp <- paste(phenotypes$strain, phenotypes$acclimation, sep = "_")
+phenotypes$comp <- factor(phenotypes$comp, levels = treatments)
+phenotypes$acclimation <- factor(phenotypes$acclimation, levels = acclimations)
+phenotypes$strain <- factor(phenotypes$strain, levels = strains)
+
+#make a quantitative version of acclimation; replace with actual dates at a later time
+phenotypes$acclimation_quant <- phenotypes$acclimation
+phenotypes$acclimation_quant <- gsub("Control", 0, phenotypes$acclimation_quant)
+phenotypes$acclimation_quant <- gsub("2day", 2, phenotypes$acclimation_quant)
+phenotypes$acclimation_quant <- gsub("2wk", 14, phenotypes$acclimation_quant)
+phenotypes$acclimation_quant <- gsub("6wk", 56, phenotypes$acclimation_quant)
+phenotypes$acclimation_quant <- as.numeric(phenotypes$acclimation_quant)
+
+#annotate strains as high or low elevation
+elevations <- data.frame(strain = c("BW", "LL", "KN", "MBS", "SM"),
+                         elevation = c("low", "low", "low", "high", "high"))
+
+phenotypes <- merge(phenotypes, elevations, by = "strain")
+phenotypes$elevation <- factor(phenotypes$elevation, levels = c("low", "high"))
+```
+
+```{r import-DU-colony-records}
+#import DU colony records
+KN_MBS_records <- read.csv("reference_files/KN_ME_mouse_records.csv", header = TRUE)
+KN_MBS_records$Individual <- toupper(KN_MBS_records$Individual)
+KN_MBS_records$Strain <- gsub("ME", "MBS", KN_MBS_records$Strain)
+
+KN_MBS_records$mouse_id <- paste(KN_MBS_records$Strain, "_", KN_MBS_records$Generation, "_",
+                                 KN_MBS_records$Family, "_", KN_MBS_records$Individual,
+                                 sep = "")
+
+#date at time of experiment calculations
+KN_MBS_records <- KN_MBS_records[,c("DOB", "mouse_id", "sampled.on.date")]
+
+KN_MBS_records <- KN_MBS_records %>%
+  mutate(
+    DOB_parsed = mdy(DOB),
+    sampled_parsed = mdy(sampled.on.date),  
+    age_days = as.numeric(sampled_parsed - DOB_parsed),
+    age_weeks = age_days / 7,
+    age_months = age_days / 30.44,
+    age_years = age_days / 365.25
+  )
+
+# import DU colony data on stock center peros
+stock_center_records <- read.csv("reference_files/Pero_stock_center_mouse_records.csv", header = TRUE)
+
+stock_center_records <- stock_center_records[,c("DOB", "Mouse_ID", "Dissection_Date")]
+colnames(stock_center_records) <- gsub("Mouse_ID", "mouse_id", colnames(stock_center_records))
+colnames(stock_center_records) <- gsub("Dissection_Date", "sampled.on.date", colnames(stock_center_records))
+
+# calculate age at time of experiment
+stock_center_records <- stock_center_records %>%
+  mutate(
+    DOB_parsed = mdy(DOB),
+    sampled_parsed = mdy(sampled.on.date),  
+    age_days = as.numeric(sampled_parsed - DOB_parsed),
+    age_weeks = age_days / 7,
+    age_months = age_days / 30.44,   # average month length
+    age_years = age_days / 365.25
+  )
+
+phenotypes <- merge(phenotypes, rbind(KN_MBS_records, stock_center_records), 
+                    by = "mouse_id",
+                    all.x = TRUE)
+
+# visualize age differences across strains
+ggplot(phenotypes, aes(x = strain, y = age_days, color = acclimation)) +
+  geom_violin() +
+  geom_point() +
+  facet_wrap(~ acclimation)
+
+#age stats
+paste("MBS mice were on average ",
+      round(mean(phenotypes[phenotypes$strain == "MBS" & !(is.na(phenotypes$total_count)),]$age_days),0),
+      " +/- ",
+      round(calculate_sem(phenotypes[phenotypes$strain == "MBS" & !(is.na(phenotypes$total_count)),]$age_days),0),
+      " days old at the time of the experiment",
+      sep = "")
+
+paste("SM mice were on average ",
+      round(mean(phenotypes[phenotypes$strain == "SM" & !(is.na(phenotypes$RelativeTestesWeight)),]$age_days),0),
+      " +/- ",
+      round(calculate_sem(phenotypes[phenotypes$strain == "SM" & !(is.na(phenotypes$RelativeTestesWeight)),]$age_days),0),
+      " days old at the time of the experiment",
+      sep = "")
+
+paste("KN mice were on average ",
+      round(mean(phenotypes[phenotypes$strain == "KN" & !(is.na(phenotypes$total_count)),]$age_days),0),
+      " +/- ",
+      round(calculate_sem(phenotypes[phenotypes$strain == "KN" & !(is.na(phenotypes$total_count)),]$age_days),0),
+      " days old at the time of the experiment",
+      sep = "")
+
+paste("BW mice were on average ",
+      round(mean(phenotypes[phenotypes$strain == "BW" & !(is.na(phenotypes$RelativeTestesWeight)),]$age_days),0),
+      " +/- ",
+      round(calculate_sem(phenotypes[phenotypes$strain == "BW" & !(is.na(phenotypes$RelativeTestesWeight)),]$age_days),0),
+      " days old at the time of the experiment",
+      sep = "")
+
+paste("LL mice were on average ",
+      round(mean(phenotypes[phenotypes$strain == "LL" & !(is.na(phenotypes$RelativeTestesWeight)),]$age_days),0),
+      " +/- ",
+      round(calculate_sem(phenotypes[phenotypes$strain == "LL" & !(is.na(phenotypes$RelativeTestesWeight)),]$age_days),0),
+      " days old at the time of the experiment",
+      sep = "")
+
+
+#export phenotype data
+write.csv(x = phenotypes, file = "exported_files/high_elevation_male_fertility_phenotypes_post-processing.csv", row.names = FALSE)
+```
+
+```{r calculate-summary-statistics}
+#calculate the mean & sem RelativeTestesWeight for each comparison
+RTW_means <- round(tapply(phenotypes$RelativeTestesWeight, 
+                          phenotypes$comp, mean, na.rm = TRUE), 3)
+RTW_sem <- round(tapply(phenotypes$RelativeTestesWeight, 
+                        phenotypes$comp, calculate_sem), 3)
+
+RTW_stats_df <- data.frame(comp = levels(phenotypes$comp),
+                           RTW_means = RTW_means,
+                           RTW_sem = RTW_sem)
+
+phenotypes <- merge(phenotypes, RTW_stats_df, by = "comp", all = TRUE)
+
+
+#calculate the mean & sem Normalized_Sperm_Count for each comparison
+NSC_means <- round(tapply(phenotypes$Normalized_Sperm_Count, 
+                          phenotypes$comp, mean, na.rm = TRUE), 3)
+NSC_sem <- round(tapply(phenotypes$Normalized_Sperm_Count, 
+                        phenotypes$comp, calculate_sem), 3)
+
+NSC_stats_df <- data.frame(comp = levels(phenotypes$comp),
+                           NSC_means = NSC_means,
+                           NSC_sem = NSC_sem)
+
+phenotypes <- merge(phenotypes, NSC_stats_df, by = "comp", all = TRUE)
+
+
+#calculate the mean & sem RelativeSVWeight for each comparison
+RSVW_means <- round(tapply(phenotypes$RelativeSVWeight, 
+                           phenotypes$comp, mean, na.rm = TRUE), 3)
+RSVW_sem <- round(tapply(phenotypes$RelativeSVWeight, 
+                         phenotypes$comp, calculate_sem), 3)
+
+RSVW_stats_df <- data.frame(comp = levels(phenotypes$comp),
+                            RSVW_means = RSVW_means,
+                            RSVW_sem = RSVW_sem)
+
+phenotypes <- merge(phenotypes, RSVW_stats_df, by = "comp", all = TRUE)
+
+#calculate the mean & sem avg_area_tubule for each comparison
+TA_means <- round(tapply(phenotypes$avg_area_tubule, 
+                         phenotypes$comp, mean, na.rm = TRUE), 3)
+TA_sem <- round(tapply(phenotypes$avg_area_tubule, 
+                       phenotypes$comp, calculate_sem), 3)
+
+TA_stats_df <- data.frame(comp = levels(phenotypes$comp),
+                          TA_means = TA_means,
+                          TA_sem = TA_sem)
+
+phenotypes <- merge(phenotypes, TA_stats_df, by = "comp", all = TRUE)
+
+
+
+#calculate the mean & sem avg_diameterlong_tubule for each comparison
+TDL_means <- round(tapply(phenotypes$avg_diameterlong_tubule, 
+                          phenotypes$comp, mean, na.rm = TRUE), 3)
+TDL_sem <- round(tapply(phenotypes$avg_diameterlong_tubule, 
+                        phenotypes$comp, calculate_sem), 3)
+
+TDL_stats_df <- data.frame(comp = levels(phenotypes$comp),
+                           TDL_means = TDL_means,
+                           TDL_sem = TDL_sem)
+
+phenotypes <- merge(phenotypes, TDL_stats_df, by = "comp", all = TRUE)
+
+
+
+#calculate the mean & sem avg_diametershort_tubule for each comparison
+TDS_means <- round(tapply(phenotypes$avg_diametershort_tubule, 
+                          phenotypes$comp, mean, na.rm = TRUE), 3)
+TDS_sem <- round(tapply(phenotypes$avg_diametershort_tubule, 
+                        phenotypes$comp, calculate_sem), 3)
+
+TDS_stats_df <- data.frame(comp = levels(phenotypes$comp),
+                           TDS_means = TDS_means,
+                           TDS_sem = TDS_sem)
+
+phenotypes <- merge(phenotypes, TDS_stats_df, by = "comp", all = TRUE)
+
+
+
+#calculate the mean & sem avg_perimeter_tubule for each comparison
+TP_means <- round(tapply(phenotypes$avg_perimeter_tubule, 
+                         phenotypes$comp, mean, na.rm = TRUE), 3)
+TP_sem <- round(tapply(phenotypes$avg_perimeter_tubule, 
+                       phenotypes$comp, calculate_sem), 3)
+
+TP_stats_df <- data.frame(comp = levels(phenotypes$comp),
+                          TP_means = TP_means,
+                          TP_sem = TP_sem)
+
+phenotypes <- merge(phenotypes, TP_stats_df, by = "comp", all = TRUE)
+
+phenotypes_corr_focal_df <- phenotypes[phenotypes$strain %in% c("KN", "MBS"),]
+phenotypes_corr_focal_df <- phenotypes_corr_focal_df[,c("mass", "nose2base", "tail", "length", "rt.foot", "left.ear", "testis1", "testis2", "sv", "bat", "wat", "total_count", "RelativeTestesWeight", "RelativeSVWeight", "Fat_Proportions", "Relative_Fat_Browness", "paired_TW", "Normalized_Sperm_Count", "avg_area_tubule", 
+                                                        "avg_diameterlong_tubule", "avg_diametershort_tubule","avg_perimeter_tubule")]
+phenotypes_corr_focal_df <- na.omit(phenotypes_corr_focal_df)
+
+#all phenotypes
+all_phenotypes_corr_matrix <- cor(phenotypes_corr_focal_df)
+
+all_phenotypes_corr_matrix_summary <- rcorr(as.matrix(all_phenotypes_corr_matrix),
+                                            type="spearman")
+
+#male fertility correlation matrix
+reproductive_traits <- c("testis1",
+                         "testis2",
+                         "RelativeTestesWeight",
+                         "sv",
+                         "RelativeSVWeight",
+                         "Normalized_Sperm_Count",
+                         "avg_diameterlong_tubule",
+                         "avg_diametershort_tubule",
+                         "avg_area_tubule")
+
+male_fertility_corr_matrix <- cor(phenotypes_corr_focal_df[, reproductive_traits])
+
+male_fertility_corr_matrix_summary <- rcorr(as.matrix(male_fertility_corr_matrix),
+                                            type="spearman")
+
+pdf("exported_figures/all_measurements_correlation_plot.pdf",
+    height = 10, width = 10)
+
+corrplot(all_phenotypes_corr_matrix, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+
+dev.off()
+
+pdf("exported_figures/male_fertility_correlation_plot.pdf",
+    height = 10, width = 10)
+
+corrplot(male_fertility_corr_matrix, type = "upper", order = "original",
+         tl.col = "black", tl.srt = 45)
+
+dev.off()
+```
+
+```{r phenotype-data-visualization}
+#box plots graphing parameters
+point_alpha <- 0.2
+point_size <- 1
+vjust_value <- 0.5
+
+# Relative Testes Weight
+
+RelativeTestesWeight_boxplot <- ggplot(phenotypes[!is.na(phenotypes$RelativeTestesWeight),], 
+                                       aes(x = acclimation, y = RelativeTestesWeight, 
+                                           group=comp, color=strain, fill = strain)) + 
+  geom_boxplot(width=.4, position = position_dodge(0.75), linewidth = 0.6, outliers = FALSE, alpha = 0.4, notch = FALSE, aes(color = strain)) +
+  geom_point(position = position_dodge(width = 0.75), alpha = point_alpha, size = point_size, fill = NA) +
+  scale_color_manual(values=all_pop_colors[names(all_pop_colors) %in% unique(phenotypes[!is.na(phenotypes$RelativeTestesWeight),]$strain)]) +
+  scale_fill_manual(values=all_pop_colors[names(all_pop_colors) %in% unique(phenotypes[!is.na(phenotypes$RelativeTestesWeight),]$strain)]) +
+  theme_bw() +
+  theme(legend.position = "none", 
+        axis.title.x=element_blank(), 
+        axis.text.x = element_text(angle = 45, vjust = vjust_value), 
+        plot.margin = unit(c(0.4, 0.07, 0, 0.07), "cm"), 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.ticks.length.x = unit(0, "cm"), 
+        axis.ticks.length.y = unit(0, "cm")) +
+  scale_x_discrete(labels = c("0 days", 
+                              "2 days",
+                              "2 weeks", 
+                              "6 weeks")) + 
+  ylab("Testes weight (mg/g)") +
+  xlab("Duration of hypoxic exposure")
+
+
+Normalized_Sperm_Count_boxplot <- ggplot(phenotypes[!is.na(phenotypes$Normalized_Sperm_Count),], 
+                                         aes(x = acclimation, y = Normalized_Sperm_Count, 
+                                             group=comp, color=strain, fill = strain)) + 
+  geom_boxplot(width=.4, position = position_dodge(0.75), linewidth = 0.6, outliers = FALSE, alpha = 0.4, notch = FALSE, aes(color = strain)) +
+  geom_point(position = position_dodge(width = 0.75), alpha = point_alpha, size = point_size, fill = NA) +
+  scale_color_manual(values=all_pop_colors[names(all_pop_colors) %in% unique(phenotypes[!is.na(phenotypes$Normalized_Sperm_Count),]$strain)]) +
+  scale_fill_manual(values=all_pop_colors[names(all_pop_colors) %in% unique(phenotypes[!is.na(phenotypes$Normalized_Sperm_Count),]$strain)]) +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        axis.title.x=element_blank(), 
+        axis.text.x = element_text(angle = 45, vjust = vjust_value), 
+        plot.margin = unit(c(0.4, 0.07, 0, 0.07), "cm"), 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.ticks.length.x = unit(0, "cm"), 
+        axis.ticks.length.y = unit(0, "cm")) +
+  scale_x_discrete(labels = c("0 days", 
+                              "2 days",
+                              "2 weeks", 
+                              "6 weeks")) + 
+  ylab("Sperm count (10e6)") +
+  xlab("Duration of hypoxic exposure")
+
+
+#RelativeSVWeight
+
+RelativeSVWeight_boxplot <- ggplot(phenotypes[!is.na(phenotypes$RelativeSVWeight),], 
+                                   aes(x = acclimation, y = RelativeSVWeight, 
+                                       group=comp, color=strain, fill = strain)) + 
+  geom_boxplot(width=.4, position = position_dodge(0.75), linewidth = 0.6, outliers = FALSE, alpha = 0.4, notch = FALSE, aes(color = strain)) +
+  geom_point(position = position_dodge(width = 0.75), alpha = point_alpha, size = point_size, fill = NA) +
+  scale_color_manual(values=all_pop_colors[names(all_pop_colors) %in% unique(phenotypes[!is.na(phenotypes$RelativeSVWeight),]$strain)]) +
+  scale_fill_manual(values=all_pop_colors[names(all_pop_colors) %in% unique(phenotypes[!is.na(phenotypes$RelativeSVWeight),]$strain)]) +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        axis.title.x=element_blank(), 
+        axis.text.x = element_text(angle = 45, vjust = vjust_value), 
+        plot.margin = unit(c(0.4, 0.07, 0, 0.07), "cm"), 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.ticks.length.x = unit(0, "cm"), 
+        axis.ticks.length.y = unit(0, "cm")) +
+  scale_x_discrete(labels = c("0 days", 
+                              "2 days",
+                              "2 weeks", 
+                              "6 weeks")) + 
+  ylab("Seminal vesicle weight (mg/g)") +
+  xlab("Duration of hypoxic exposure")
+
+#avg_area_tubule
+
+avg_area_tubule_boxplot <- ggplot(phenotypes[!is.na(phenotypes$avg_area_tubule),], 
+                                  aes(x = acclimation, y = avg_area_tubule, 
+                                      group=comp, color=strain, fill = strain)) + 
+  geom_boxplot(width=.4, position = position_dodge(0.75), linewidth = 0.6, outliers = FALSE, alpha = 0.4, notch = FALSE, aes(color = strain)) +
+  geom_point(position = position_dodge(width = 0.75), alpha = point_alpha, size = point_size, fill = NA) +
+  scale_color_manual(values=all_pop_colors[names(all_pop_colors) %in% unique(phenotypes[!is.na(phenotypes$avg_area_tubule),]$strain)]) +
+  scale_fill_manual(values=all_pop_colors[names(all_pop_colors) %in% unique(phenotypes[!is.na(phenotypes$avg_area_tubule),]$strain)]) +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        axis.title.x=element_blank(), 
+        axis.text.x = element_text(angle = 45, vjust = vjust_value), 
+        plot.margin = unit(c(0.4, 0.07, 0, 0.07), "cm"), 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.ticks.length.x = unit(0, "cm"), 
+        axis.ticks.length.y = unit(0, "cm")) +
+  scale_x_discrete(labels = c("0 days", 
+                              "2 days",
+                              "2 weeks", 
+                              "6 weeks")) + 
+  ylab("Tubule area (mm^2)") +
+  xlab("Duration of hypoxic exposure")
+
+fertility_complex_boxplots_grid <- plot_grid(RelativeTestesWeight_boxplot, 
+                                             Normalized_Sperm_Count_boxplot, 
+                                             RelativeSVWeight_boxplot, 
+                                             avg_area_tubule_boxplot,
+                                             nrow = 1, align = "vh")
+
+ggsave(filename = "exported_figures/complex_fertility_boxplots.pdf", fertility_complex_boxplots_grid, height = 6, width = 20)
+```
+
+```{r sem-plots}
+# summarize fertility stats for plotting
+phenotypes_summarized <- phenotypes %>%
+  group_by(strain, acclimation) %>%
+  dplyr::summarize(
+    mean_RTW = mean(RelativeTestesWeight, na.rm = TRUE),
+    sem_RTW  = sd(RelativeTestesWeight, na.rm = TRUE) / sqrt(sum(!is.na(RelativeTestesWeight))),
+    
+    mean_RSVW = mean(RelativeSVWeight, na.rm = TRUE),
+    sem_RSVW  = sd(RelativeSVWeight, na.rm = TRUE) / sqrt(sum(!is.na(RelativeSVWeight))),
+    
+    mean_NSC = mean(Normalized_Sperm_Count, na.rm = TRUE),
+    sem_NSC  = sd(Normalized_Sperm_Count, na.rm = TRUE) / sqrt(sum(!is.na(Normalized_Sperm_Count))),
+    
+    mean_TA = mean(avg_area_tubule, na.rm = TRUE),
+    sem_TA  = sd(avg_area_tubule, na.rm = TRUE) / sqrt(sum(!is.na(avg_area_tubule))),
+    
+    .groups = "drop"
+  )
+
+# sem plots
+# Relative testes weight
+RelativeTestesWeight_semplot <- ggplot(phenotypes_summarized, aes(x = acclimation, y = mean_RTW, 
+                                                                  color = strain, group = strain)) +
+  geom_point(data = phenotypes, 
+             aes(x = acclimation, y = RelativeTestesWeight, color = strain),
+             alpha = point_alpha, size = point_size, inherit.aes = FALSE,
+             position = position_jitterdodge(
+               jitter.width = 0.1,
+               jitter.height = 0,
+               dodge.width = 0.75,
+               seed = NA
+             )) +
+  geom_line(position = position_dodge(width = 0.75)) +
+  geom_errorbar(
+    aes(ymin = mean_RTW - sem_RTW, ymax = mean_RTW + sem_RTW),
+    width = 0.3,
+    position = position_dodge(width = 0.75),
+    lineend = "round") +
+  xlab("Duration of hypoxic exposure") +
+  ylab("Testes weight (mg/g)") +
+  scale_color_manual(values = all_pop_colors) +
+  scale_fill_manual(values = all_pop_colors) +
+  scale_x_discrete(labels = c("0 days", 
+                              "2 days",
+                              "2 weeks", 
+                              "6 weeks")) + 
+  theme_bw() + 
+  theme(legend.position = "none", 
+        axis.title.x=element_blank(), 
+        axis.text.x = element_text(angle = 45, vjust = vjust_value), 
+        plot.margin = unit(c(0.4, 0.07, 0, 0.07), "cm"), 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.ticks.length.x = unit(0, "cm"), 
+        axis.ticks.length.y = unit(0, "cm"))
+
+# relative seminal vesicle weight plot
+RelativeSVWeight_semplot <- ggplot(phenotypes_summarized, aes(x = acclimation, y = mean_RSVW, 
+                                                              color = strain, group = strain)) +
+  geom_point(data = phenotypes, 
+             aes(x = acclimation, y = RelativeSVWeight, color = strain),
+             alpha = point_alpha, size = point_size, inherit.aes = FALSE,
+             position = position_jitterdodge(
+               jitter.width = 0.1,
+               jitter.height = 0,
+               dodge.width = 0.75,
+               seed = NA
+             )) +
+  geom_line(position = position_dodge(width = 0.75)) +
+  geom_errorbar(
+    aes(ymin = mean_RSVW - sem_RSVW, ymax = mean_RSVW + sem_RSVW),
+    width = 0.3,
+    position = position_dodge(width = 0.75),
+    lineend = "round") +
+  xlab("Duration of hypoxic exposure") +
+  ylab("Seminal vesicle weight (mg/g)") +
+  scale_color_manual(values = all_pop_colors) +
+  scale_x_discrete(labels = c("0 days", 
+                              "2 days",
+                              "2 weeks", 
+                              "6 weeks")) + 
+  theme_bw() + 
+  theme(legend.position = "none", 
+        axis.title.x=element_blank(), 
+        axis.text.x = element_text(angle = 45, vjust = vjust_value), 
+        plot.margin = unit(c(0.4, 0.07, 0, 0.07), "cm"), 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.ticks.length.x = unit(0, "cm"), 
+        axis.ticks.length.y = unit(0, "cm"))
+
+# normalized sperm count
+Normalized_Sperm_Count_semplot <- ggplot(phenotypes_summarized, aes(x = acclimation, y = mean_NSC, 
+                                                                    color = strain, group = strain)) +
+  geom_point(data = phenotypes, 
+             aes(x = acclimation, y = Normalized_Sperm_Count, color = strain),
+             alpha = point_alpha, size = point_size, inherit.aes = FALSE,
+             position = position_jitterdodge(
+               jitter.width = 0.1,
+               jitter.height = 0,
+               dodge.width = 0.75,
+               seed = NA
+             )) +
+  geom_line(position = position_dodge(width = 0.75)) +
+  geom_errorbar(
+    aes(ymin = mean_NSC - sem_NSC, ymax = mean_NSC + sem_NSC),
+    width = 0.3,
+    position = position_dodge(width = 0.75),
+    lineend = "round") +
+  xlab("Duration of hypoxic exposure") +
+  ylab("Sperm count (10e6)") +
+  scale_color_manual(values = all_pop_colors) +
+  scale_x_discrete(labels = c("0 days", 
+                              "2 days",
+                              "2 weeks", 
+                              "6 weeks")) + 
+  theme_bw() + 
+  theme(legend.position = "none", 
+        axis.title.x=element_blank(), 
+        axis.text.x = element_text(angle = 45, vjust = vjust_value), 
+        plot.margin = unit(c(0.4, 0.07, 0, 0.07), "cm"), 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.ticks.length.x = unit(0, "cm"), 
+        axis.ticks.length.y = unit(0, "cm"))
+
+#average seminiferous tubule area 
+avg_area_tubule_semplot <- ggplot(phenotypes_summarized, aes(x = acclimation, y = mean_TA, 
+                                                             color = strain, group = strain)) +
+  geom_point(data = phenotypes, 
+             aes(x = acclimation, y = avg_area_tubule, color = strain),
+             alpha = point_alpha, size = point_size, inherit.aes = FALSE,
+             position = position_jitterdodge(
+               jitter.width = 0.1,
+               jitter.height = 0,
+               dodge.width = 0.75,
+               seed = NA
+             )) +
+  geom_line(position = position_dodge(width = 0.75)) +
+  geom_errorbar(
+    aes(ymin = mean_TA - sem_TA, ymax = mean_TA + sem_TA),
+    width = 0.3,
+    position = position_dodge(width = 0.75),
+    lineend = "round") +
+  xlab("Duration of hypoxic exposure") +
+  ylab("Tubule area (mm^2)") +
+  scale_color_manual(values = all_pop_colors) +
+  scale_x_discrete(labels = c("0 days", 
+                              "2 days",
+                              "2 weeks", 
+                              "6 weeks")) + 
+  theme_bw() + 
+  theme(legend.position = "none", 
+        axis.title.x=element_blank(), 
+        axis.text.x = element_text(angle = 45, vjust = vjust_value), 
+        plot.margin = unit(c(0.4, 0.07, 0, 0.07), "cm"), 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.ticks.length.x = unit(0, "cm"), 
+        axis.ticks.length.y = unit(0, "cm"))
+
+fertility_complex_semplots_grid <- plot_grid(RelativeTestesWeight_semplot, 
+                                             Normalized_Sperm_Count_semplot, 
+                                             RelativeSVWeight_semplot, 
+                                             avg_area_tubule_semplot,
+                                             nrow = 1, align = "vh")
+
+ggsave(filename = "exported_figures/complex_fertility_semplots.pdf", fertility_complex_semplots_grid, height = 6, width = 20)
+```
+
+```{r map-set-up}
+# import species distribution maps; these came from IUCN redlist
+dist_pero_man <- st_read(dsn = "reference_files/Space_files/redlist_species_data_24a6201f-edaf-45f8-87c7-07500d72bd9e/data_0.shp")
+
+dist_pero_boy <- st_read(dsn = "reference_files/Space_files/redlist_species_data_2f42badb-755a-4729-8012-76a7d02b1dd9/data_0.shp")
+
+dist_pero_leu <- st_read(dsn  = "reference_files/Space_files/redlist_species_data_cdc68519-4677-4808-8f07-046f6c7d71d0/data_0.shp")
+
+#download geography shape files
+us <- gadm("USA", level=0, path = "reference_files/US_admin_boundaries/gadm/", version="latest", resolution=1)
+states <- gadm("USA", level=1, path = "reference_files/US_admin_boundaries/gadm/", version="latest", resolution=1)
+colorado <- states[states$NAME_1 =="Colorado",]
+nebraska <- states[states$NAME_1 =="Nebraska",]
+north_carolina <- states[states$NAME_1 =="North Carolina",]
+california <- states[states$NAME_1 =="California",]
+michigan <- states[states$NAME_1 =="Michigan",]
+
+#make shapefiles into sf object
+us_sf <- st_as_sf(us)
+pero_man_sf <- st_as_sf(dist_pero_man)
+pero_boy_sf <- st_as_sf(dist_pero_boy)
+pero_leu_sf <- st_as_sf(dist_pero_leu)
+colorado_sf <- st_as_sf(colorado)
+nebraska_sf <- st_as_sf(nebraska)
+north_carolina_sf <- st_as_sf(north_carolina)
+california_sf <- st_as_sf(california)
+michigan_sf <- st_as_sf(michigan)
+
+#remove great lakes from michigan
+all_lakes <- sf::st_read(file.path( "reference_files/Space_files/ne_10m_lakes/ne_10m_lakes.shp"))
+great_lakes <- all_lakes[all_lakes$name %in% c("Lake Superior", "Lake Michigan", "Lake Huron", "Lake  Clair", "Lake Erie"),]
+great_lakes <- st_transform(great_lakes, crs = 4326)
+michigan_sf <- st_difference(michigan_sf, st_union(great_lakes))
+
+#create sf objects representing the colony locations; 
+strain_localities <- read.csv("reference_files/strain_localities.csv", header = TRUE)
+strain_localities_sf <- st_as_sf(strain_localities, coords = c("LONG", "LAT"), crs = 4326, agr = "constant")
+
+#create sf object of the contiguous us and then simplify for faster plotting
+#nation_object <- nation()
+#saveRDS(nation_object, "reference_files/US_shape_object.rds")
+nation_object <- readRDS("reference_files/US_shape_object.rds")
+
+contiguous_us_sf <- st_crop(st_as_sf(nation_object), xmin=-35, xmax=-130, ymin=15, ymax=49)
+contiguous_us_sf_simplified <- st_simplify(contiguous_us_sf, preserveTopology = FALSE, dTolerance = 1000)
+contiguous_us_sf_noIsland <- ms_filter_islands(contiguous_us_sf_simplified, min_area = 12391399903)
+contiguous_us_sf_noIsland <- st_transform(contiguous_us_sf_noIsland, 4326)
+
+#create sf object of the maniculatus range in the continental US
+pero_man_sf_trans <- st_transform(pero_man_sf, 4326)
+pero_man_intersect_sf <- st_intersection(contiguous_us_sf_noIsland, pero_man_sf_trans)
+
+#create sf object of the boylii range in the continental US
+pero_boy_sf_trans <- st_transform(pero_boy_sf, 4326)
+pero_boy_intersect_sf <- st_intersection(contiguous_us_sf_noIsland, pero_boy_sf_trans)
+
+#create sf object of the leucopus range in the continental US
+pero_leu_sf_trans <- st_transform(pero_leu_sf, 4326)
+pero_leu_intersect_sf <- st_intersection(contiguous_us_sf_noIsland, pero_leu_sf_trans)
+
+#range overlap
+pero_man_leu_intersect_sf <- st_intersection(pero_man_sf, pero_leu_sf)
+pero_man_leu_intersect_sf <- st_intersection(contiguous_us_sf_noIsland, pero_man_leu_intersect_sf)
+
+#colony map
+range_alpha <- 1
+state_alpha <- 0.7
+range_outline <- 0.1
+
+
+# visualize the approximate collection sites for all strains used in the study with the p. maniculatus and p. leucopus ranges
+strain_locality_map <- ggplot() + 
+  geom_sf(data = pero_leu_intersect_sf, fill = leu_color, alpha = range_alpha, linewidth = range_outline, color = "black") + 
+  geom_sf(data = pero_man_intersect_sf, fill = man_color, alpha = range_alpha, linewidth = range_outline, color = "black") + 
+  geom_sf_pattern(data = pero_man_leu_intersect_sf,
+                  aes(fill = NAMBS),
+                  pattern = "stripe",
+                  pattern_color = leu_color,
+                  pattern_fill = leu_color,
+                  fill = man_color, 
+                  pattern_density = 0.5,
+                  linewidth = range_outline) +
+  geom_sf(data = contiguous_us_sf_noIsland, fill = NA, linewidth = 0.5, color = "black") + 
+  geom_sf(data = colorado_sf, fill = all_pop_colors[names(all_pop_colors) == "MBS"], 
+          alpha = state_alpha, linewidth = 0.5, color = "black") + 
+  geom_sf(data = nebraska_sf, fill = all_pop_colors[names(all_pop_colors) == "KN"], 
+          alpha = state_alpha, linewidth = 0.5, color = "black") + 
+  geom_sf(data = north_carolina_sf, fill = all_pop_colors[names(all_pop_colors) == "LL"], 
+          alpha = state_alpha, linewidth = 0.5, color = "black") + 
+  geom_sf(data = michigan_sf, fill = all_pop_colors[names(all_pop_colors) == "BW"], 
+          alpha = state_alpha, linewidth = 0.5, color = "black") + 
+  geom_sf(data = california_sf, fill = all_pop_colors[names(all_pop_colors) == "SM"], 
+          alpha = state_alpha, linewidth = 0.5, color = "black") + 
+  geom_sf(data = strain_localities_sf, aes(fill = strain), size = 2, pch = 21, stroke = 1, color = "black") + 
+  #geom_sf_text(data = strain_localities_sf, aes(labels = strain)) +
+  scale_fill_manual(values = all_pop_colors) +
+  coord_sf() +
+  theme_minimal() + 
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        axis.text = element_blank(),
+        axis.title = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        legend.position = "bottom")
+
+strain_locality_map
+
+ggsave(strain_locality_map, filename = "exported_figures/strain_locality_map.pdf")
+```
+
+```{r wilsterman-phenotypes}
+# import data from wilsterman KN and MBS experiment
+wil_data <- read.csv("reference_files/Wilsterman_colony_data/maleColonyRecords_Mar142026.csv", header = TRUE)
+
+# The averageTVol column was calculatewil_data accorwil_dataing to the following equations:
+##  wil_data$T1Vol <- (4/3)*pi*(as.numeric(wil_data$TL1)/2)*as.numeric(wil_data$TW1)
+##  wil_data$T2Vol <- (4/3)*pi*(as.numeric(wil_data$TL2)/2)*as.numeric(wil_data$TW2)
+##  wil_data$averageTVol <- rowSums(wil_data[, c("T1Vol", "T2Vol")], na.rm = TRUE) / 
+##   rowSums(!is.na(wil_data[, c("T1Vol", "T2Vol")]))
+
+# format dataframe
+wil_data$Age.at.Euth <- as.numeric(wil_data$Age.at.Euth)
+wil_data$Line <- gsub("MB", "MBS", wil_data$Line)
+wil_data$Line <- factor(wil_data$Line, levels = c("KN", "MBS"))
+wil_data$Mass..g. <- as.numeric(wil_data$Mass..g.)
+wil_data$Body..length..cm. <- as.numeric(wil_data$Body..length..cm.)
+wil_data <- wil_data[-which(is.na(wil_data$Line)),]
+
+#remove wild caught individuals and individuals that unsuccessfully bred
+wil_data <- wil_data[!is.na(wil_data$DOB) & wil_data$DOB != "UNK" & !grepl("WC_", wil_data$EarClipLocation),]
+wil_data <- wil_data[!wil_data$cat == "Ext Unsuccessful",]
+
+wil_data$cat <- gsub(" ", "_", wil_data$cat)
+wil_data$cat <- gsub("_$", "", wil_data$cat)
+wil_data$cat <- factor(wil_data$cat,
+                       levels = c("No", "Ext_Successful"))
+
+wil_data$plotGr <- gsub(" ", "_", wil_data$plotGr)
+wil_data$plotGr <- gsub("_$", "", wil_data$plotGr)
+wil_data$plotGr <- as.factor(paste(wil_data$Line, wil_data$cat, sep = "_"))
+
+
+# calculate age ranges
+paste("KN mice with same-sex sibs were on average ",
+      round(mean(wil_data[wil_data$plotGr == "KN_No",]$Age.at.Euth),0),
+      " +/- ",
+      round(calculate_sem(wil_data[wil_data$plotGr == "KN_No",]$Age.at.Euth),0),
+      " days old at the time of the experiment",
+      sep = "")
+
+paste("MBS mice with same-sex sibs were on average ",
+      round(mean(wil_data[wil_data$plotGr == "MBS_No",]$Age.at.Euth),0),
+      " +/- ",
+      round(calculate_sem(wil_data[wil_data$plotGr == "MBS_No",]$Age.at.Euth),0),
+      " days old at the time of the experiment",
+      sep = "")
+
+paste("KN mice with female exposure were on average ",
+      round(mean(wil_data[wil_data$plotGr == "KN_Ext_Successful",]$Age.at.Euth),0),
+      " +/- ",
+      round(calculate_sem(wil_data[wil_data$plotGr == "KN_Ext_Successful",]$Age.at.Euth),0),
+      " days old at the time of the experiment",
+      sep = "")
+
+paste("MBS mice with female exposure were on average ",
+      round(mean(wil_data[wil_data$plotGr == "MBS_Ext_Successful",]$Age.at.Euth),0),
+      " +/- ",
+      round(calculate_sem(wil_data[wil_data$plotGr == "MBS_Ext_Successful",]$Age.at.Euth),0),
+      " days old at the time of the experiment",
+      sep = "")
+
+
+wilsterman_model <- lm(averageTVol ~ Line + cat +  Body..length..cm. + Mass..g., data = wil_data)
+Anova(wilsterman_model, type = "III")
+check_model(wilsterman_model)
+pairs(emmeans(wilsterman_model, ~Line), adjust = "BH")
+pairs(emmeans(wilsterman_model, ~cat), adjust = "BH")
+
+# visualize testis volume for each strain by female exposure category
+wilsterman_RTW_plot <- ggplot(wil_data, 
+                              aes(x = cat, y = averageTVol, 
+                                  group = plotGr, color = Line, fill = Line)) + 
+  geom_boxplot(width = .4, position = position_dodge(0.75), linewidth = 0.6,
+               outliers = FALSE, alpha = 0.4, notch = FALSE,
+               aes(color = Line)) +
+  geom_beeswarm(aes(group = Line),
+                dodge.width = 0.75,
+                alpha = point_alpha, size = point_size, fill = NA,
+                cex = 1,
+                corral = "wrap",
+                corral.width = 0.3) +
+  scale_color_manual(values=all_pop_colors[names(all_pop_colors) %in% unique(wil_data$Line)]) +
+  scale_fill_manual(values=all_pop_colors[names(all_pop_colors) %in% unique(wil_data$Line)]) +
+  scale_x_discrete(labels = c("No" = "No exposure", 
+                              "Ext_Successful" = "Female exposure")) +
+  theme_bw() + 
+  theme(legend.position = "none", 
+        axis.title.x=element_blank(), 
+        axis.text.x = element_text(angle = 45, vjust = vjust_value), 
+        plot.margin = unit(c(0.4, 0.07, 0, 0.07), "cm"), 
+        panel.grid.major.x = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.ticks.length.x = unit(0, "cm"), 
+        axis.ticks.length.y = unit(0, "cm")) +
+  ylab("Testis volume (mm^3)") +
+  xlab("Male category")
+```
+
+```{r combo-plot}
+# combine phenotype plots for Figure 1
+aligned_grid <- plot_grid(
+  NULL,                             
+  RelativeTestesWeight_boxplot, 
+  RelativeSVWeight_boxplot, 
+  Normalized_Sperm_Count_boxplot, 
+  avg_area_tubule_boxplot,
+  wilsterman_RTW_plot,
+  nrow = 2, ncol = 3,
+  align = "vh"
+)
+
+final_plot <- ggdraw(aligned_grid) +
+  draw_plot(strain_locality_map, x = 0, y = 0.5, width = 1/3, height = 0.5)
+
+final_plot
+
+ggsave(final_plot, filename = "exported_figures/figure_1_map_and_phenotypes.pdf")
+ggsave(final_plot, filename = "exported_figures/figure_1_map_and_phenotypes.png", width = 7, height = 5)
+
+aligned_grid_sem <- plot_grid(
+  NULL,                             
+  RelativeTestesWeight_semplot, 
+  RelativeSVWeight_semplot, 
+  Normalized_Sperm_Count_semplot, 
+  avg_area_tubule_semplot,
+  wilsterman_RTW_plot,
+  nrow = 2, ncol = 3,
+  align = "vh"
+)
+
+final_plot_sem <- ggdraw(aligned_grid_sem) +
+  draw_plot(strain_locality_map, x = 0, y = 0.5, width = 1/3, height = 0.5)
+
+final_plot_sem
+
+ggsave(final_plot_sem, filename = "exported_figures/figure_1_map_and_phenotypes_sem.pdf")
+ggsave(final_plot_sem, filename = "exported_figures/figure_1_map_and_phenotypes_sem.png", width = 7, height = 5)
+```
+
+```{r focal-and-extended-stats}
+#linear models on fertility stats for focal and extended comparisons
+#RelativeTestesWeight
+focal_phenotypes <- phenotypes[phenotypes$strain %in% c("KN", "MBS"),]
+RelativeTestesWeight_focal_lm <- lmer(RelativeTestesWeight ~ acclimation*strain + (1|strain:family), 
+                                      data = focal_phenotypes)
+summary(RelativeTestesWeight_focal_lm)
+
+RelativeTestesWeight_all_lm <- lmer(RelativeTestesWeight ~ acclimation*strain + (1|strain:family), 
+                                    data = phenotypes)
+summary(RelativeTestesWeight_all_lm)
+
+
+RelativeTestesWeight_alt_lm <- lmer(RelativeTestesWeight ~ acclimation*elevation + (1|strain:elevation), 
+                                    data = phenotypes)
+summary(RelativeTestesWeight_alt_lm)
+
+
+#Normalized_Sperm_Count
+Normalized_Sperm_Count_focal_lm <- lmer(Normalized_Sperm_Count ~ acclimation*strain + (1|strain:family), 
+                                        data = focal_phenotypes)
+summary(Normalized_Sperm_Count_focal_lm)
+
+#RelativeSVWeight
+RelativeSVWeight_focal_lm <- lmer(RelativeSVWeight ~ acclimation*strain + (1|strain:family), 
+                                  data = focal_phenotypes)
+summary(RelativeSVWeight_focal_lm)
+
+RelativeSVWeight_all_lm <- lmer(RelativeSVWeight ~ acclimation*strain + (1|strain:family), 
+                                data = phenotypes)
+summary(RelativeSVWeight_all_lm)
+
+RelativeSVWeight_alt_lm <- lmer(RelativeSVWeight ~ acclimation*elevation + (1|strain:elevation), 
+                                data = phenotypes)
+summary(RelativeSVWeight_alt_lm)
+
+#avg_area_tubule
+avg_area_tubule_focal_lm <- lmer(avg_area_tubule ~ acclimation*strain + (1|strain:family), 
+                                 data = focal_phenotypes)
+summary(avg_area_tubule_focal_lm)
+```
+
+```{r table-S1}
+# compile fertility statistics to the supplemental table spreadsheets
+sentence_case <- function(x) {
+  paste0(toupper(substr(x, 1, 1)), tolower(substr(x, 2, nchar(x))))
+}
+
+mice_Controls <- data.frame(table(phenotypes[phenotypes$acclimation == "Control",]$strain))
+mice_2days <- data.frame(table(phenotypes[phenotypes$acclimation == "2day",]$strain))
+mice_2wks <- data.frame(table(phenotypes[phenotypes$acclimation == "2wk",]$strain))
+mice_6wks <- data.frame(table(phenotypes[phenotypes$acclimation == "6wk",]$strain))
+
+#get sample sizes for each group
+sample_sizes_df <- data.frame(Strain = elevations$strain,
+                              Elevation = sentence_case(elevations$elevation),
+                              Control = mice_Controls[mice_Controls$Var1 %in% elevations$strain,]$Freq,
+                              Twoday = mice_2days[mice_2days$Var1 %in% elevations$strain,]$Freq,
+                              TwoWeeks = mice_2wks[mice_2wks$Var1 %in% elevations$strain,]$Freq,
+                              SixWeeks = mice_6wks[mice_6wks$Var1 %in% elevations$strain,]$Freq)
+
+#sum sample sizes
+sample_sizes_df[6,] <- c("Total", "", as.numeric(c(sum(mice_Controls$Freq),
+                                                   sum(mice_2days$Freq),
+                                                   sum(mice_2wks$Freq),
+                                                   sum(mice_6wks$Freq))))
+sample_sizes_df[,3:6] <- lapply(sample_sizes_df[,3:6], as.numeric)
+
+sample_sizes_df$Total <- rowSums(sample_sizes_df[,3:6])
+
+
+#focal_strain_models
+RelativeTestesWeight_focal_sum <- summary(RelativeTestesWeight_focal_lm)
+RelativeSVWeight_focal_sum <- summary(RelativeSVWeight_focal_lm)
+Normalized_Sperm_Count_focal_sum <- summary(Normalized_Sperm_Count_focal_lm)
+avg_area_tubule_focal_sum <- summary(avg_area_tubule_focal_lm)
+
+# add coefficiences, betas, SEMs, and p-values to one dataframe for export
+focal_strain_models <- data.frame(focal_coefficients = rownames(RelativeTestesWeight_focal_sum$coefficients),
+                                  RTW_beta = round(data.frame(RelativeTestesWeight_focal_sum$coefficients)$Estimate, 3),
+                                  RTW_SE = round(data.frame(RelativeTestesWeight_focal_sum$coefficients)$Std..Error, 3),
+                                  RTW_p = round(data.frame(RelativeTestesWeight_focal_sum$coefficients)$Pr...t.., 3),
+                                  
+                                  RSV_beta = round(data.frame(RelativeSVWeight_focal_sum$coefficients)$Estimate, 3),
+                                  RSV_SE = round(data.frame(RelativeSVWeight_focal_sum$coefficients)$Std..Error, 3),
+                                  RSV_p = round(data.frame(RelativeSVWeight_focal_sum$coefficients)$Pr...t.., 3),
+                                  
+                                  NSC_beta = round(data.frame(Normalized_Sperm_Count_focal_sum$coefficients)$Estimate, 3),
+                                  NSC_SE = round(data.frame(Normalized_Sperm_Count_focal_sum$coefficients)$Std..Error, 3),
+                                  NSC_p = round(data.frame(Normalized_Sperm_Count_focal_sum$coefficients)$Pr...t.., 3),
+                                  
+                                  ATA_beta = round(data.frame(avg_area_tubule_focal_sum$coefficients)$Estimate, 3),
+                                  ATA_SE = round(data.frame(avg_area_tubule_focal_sum$coefficients)$Std..Error, 3),
+                                  ATA_p = round(data.frame(avg_area_tubule_focal_sum$coefficients)$Pr...t.., 3)
+)
+
+#all_strain_models
+RelativeTestesWeight_all_sum <- summary(RelativeTestesWeight_all_lm)
+RelativeSVWeight_all_sum <- summary(RelativeSVWeight_all_lm)
+
+all_strain_models <- data.frame(all_coefficients = rownames(RelativeTestesWeight_all_sum$coefficients),
+                                RTW_beta = round(data.frame(RelativeTestesWeight_all_sum$coefficients)$Estimate, 3),
+                                RTW_SE = round(data.frame(RelativeTestesWeight_all_sum$coefficients)$Std..Error, 3),
+                                RTW_p = round(data.frame(RelativeTestesWeight_all_sum$coefficients)$Pr...t.., 3),
+                                
+                                RSV_beta = round(data.frame(RelativeSVWeight_all_sum$coefficients)$Estimate, 3),
+                                RSV_SE = round(data.frame(RelativeSVWeight_all_sum$coefficients)$Std..Error, 3),
+                                RSV_p = round(data.frame(RelativeSVWeight_all_sum$coefficients)$Pr...t.., 3)
+)
+
+
+#alt_strain_models
+RelativeTestesWeight_alt_sum <- summary(RelativeTestesWeight_alt_lm)
+RelativeSVWeight_alt_sum <- summary(RelativeSVWeight_alt_lm)
+
+alt_strain_models <- data.frame(alt_coefficients = rownames(RelativeTestesWeight_alt_sum$coefficients),
+                                RTW_beta = round(data.frame(RelativeTestesWeight_alt_sum$coefficients)$Estimate, 3),
+                                RTW_SE = round(data.frame(RelativeTestesWeight_alt_sum$coefficients)$Std..Error, 3),
+                                RTW_p = round(data.frame(RelativeTestesWeight_alt_sum$coefficients)$Pr...t.., 3),
+                                
+                                RSV_beta = round(data.frame(RelativeSVWeight_alt_sum$coefficients)$Estimate, 3),
+                                RSV_SE = round(data.frame(RelativeSVWeight_alt_sum$coefficients)$Std..Error, 3),
+                                RSV_p = round(data.frame(RelativeSVWeight_alt_sum$coefficients)$Pr...t.., 3)
+)
+
+# Put your dataframes in a named list — names become sheet names
+supplemental_tables <- list(
+  "Sample sizes" = sample_sizes_df,
+  "All strain models" = all_strain_models,
+  "Elevation models" = alt_strain_models,
+  "Focal strain models" = focal_strain_models
+)
+
+# export to excel
+write.xlsx(supplemental_tables, file = "exported_files/phenotype_statistical_models.xlsx")
+```
+
+
+
+
+

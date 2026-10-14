@@ -1,0 +1,86 @@
+﻿Strain,Generation,Family,Individual,Sex,DOB,Ear Clip,Cage #,Other,Exp_condtion,sampled on date,date singly housed,comments,chamber,cage within chamber
+ME,F5,807,i,F,3/29/22,R,22284 --> 10,Rachel,2day,,,ID Unsure; ME_F5_805_i?,,
+ME,F5,812,i,F,3/27/22,R,22307-2 --> 14,,2day,,,ID unsure,,
+KN,F4,G412C,n,F,3/21/22,NA,22301 --> 4,,2day,4/10/23,12Dec22,,,
+KN,F4,G414A,d,F,3/1/22,NA --> L,22295 --> 4,,2day,4/10/23,,,,
+KN,F4,G43A,c,F,2/24/22,NA,22299 --> 9,,2day,4/13/23,,,,
+KN,F4,G43B,c,F,3/16/22,NA --> L,22302 --> 9,Karen,2day,,,,,
+KN,F4,G43C,f,F,3/8/22,NA,22291-2 --> 13,,2day,,,,,
+ME,F5,801,h,M,3/8/22,NA,22312 --> 3,,2day-1,4/10/23,1Feb23,sex confirmed,,
+ME,F5,803,d,F,3/1/22,R,22306 --> 5,,2day-1,4/10/23,,,,
+KN,F4,G410B,e,M,3/6/22,NA,22288 --> 1,,2day-1,4/10/23,1Feb23,sex confirmed,,
+KN,F4,G419A,d,M,3/17/22,NA,22283 -- > 2,,2day-1,4/10/23,1Feb23,sex confirmed,,
+ME,F5,803,c,M,3/1/22,R,22311 --> 8,,2day-2,4/13/23,1Feb23,sex confirmed,,
+KN,F4,G43A,i,M,2/24/22,NA,22309 --> 6,,2day-2,4/13/23,1Feb23,sex confirmed,,
+KN,F4,G45C,b,M,2/22/22,NA,22310 --> 7,,2day-2,4/13/23,20Dec22,,,
+ME,F5,805,l,M,4/4/22,,22305 --> 12,,2day-3,4/14/23,1Feb23,sex confirmed,,
+KN,F4,G47B,c,M,3/28/22,NA,22297 --> 11,,2day-3,4/14/23,20Dec22,,,
+ME,F5,803,g,F,3/27/22,NA --> R,22284 --> 3,,2wk-1,3/9/23,,ID Unsure,,
+ME,F5,803,a,M,2/4/22,R,22304 --> 5,,2wk-1,3/9/23,1Feb23,sex confirmed,,
+ME,F5,805,k,M,4/4/22,,22305 --> 2,,2wk-1,3/10/23,1Feb23,sex confirmed,,
+ME,F5,807,d,F,3/8/22,NA,22306 --> 3,,2wk-1,3/9/23,,,,
+KN,F4,G412C,c,M,2/26/22,N/A,22287 --> 1,,2wk-1,3/9/23,20Dec22,,,
+KN,F4,G414A,c,F,3/1/22,NA --> R,22295 --> 7,,2wk-1,3/9/23,,,,
+KN,F4,G419A,c,M,3/17/22,NA,22283 --> 4,,2wk-1,3/9/23,1Feb23,sex confirmed,,
+KN,F4,G43A,b,F,2/24/22,NA --> L,22299 --> 7,,2wk-1,3/10/23,,,,
+KN,F4,G43A,g,M,2/24/22,NA,22309 --> 6,,2wk-1,3/10/23,1Feb23,sex confirmed; unexpected right ear clip,,
+KN,F4,G43B,b,F,3/16/22,NA,22302 --> 7,Susan,2wk-1,3/10/23,,new name: Karen,,
+ME,F5,801,g,M,3/8/22,NA,22312 --> 12,,2wk-2,3/13/23,1Feb23,sex confirmed,,
+ME,F5,808,g,F,3/22/22,NA,22307-2 --> 13,,2wk-2,3/13/23,,ID unsure,,
+ME,F5,810,d,M,3/7/22,NA,22311 --> 11,,2wk-2,3/13/23,1Feb23,sex confirmed,,
+ME,F5,812,h,F,3/27/22,L,22307-1 --> 13,,2wk-2,3/14/23,,ID unsure,,
+KN,F4,G410B,d,M,3/6/22,NA,22288 --> 8,,2wk-2,3/13/23,1Feb23,sex confirmed,,
+KN,F4,G412A,c,F,3/3/22,R,22302 --> 10,Mary,2wk-2,3/13/23,,missing ear clip; either G412A or G43B; mary,,
+KN,F4,G419B,a,M,2/23/22,NA,22286 --> 9,,2wk-2,3/13/23,20Dec22,,,
+KN,F4,G43C,e,F,3/8/22,NA,22291-1 --> 10,,2wk-2,3/14/23,,,,
+ME,F5,803,b,M,3/1/22,R,15,,6wk,2/7/23,21Nov22,sex confirmed,2,e
+ME,F5,805,d,F,3/8/22,R,5,,6wk,1/31/23,,sex confirmed female after check,3,a
+ME,F5,805,j,M,4/4/22,NA,9,,6wk,2/3/23,21Nov22,sex confirmed,1,a
+ME,F5,807,c,F,3/8/22,L,5,,6wk,2/2/23,,sex confirmed,3,a
+ME,F5,807,f,M,3/28/22,R,3,,6wk,2/2/23,21Nov22,"sex confirmed, gastroc taken for snRNA QC",3,c
+ME,F5,808,b,F,2/22/22,NA,5,,6wk,2/2/23,,sex confirmed,3,a
+ME,F5,809,b,M,2/16/22,Both,8,,6wk,2/3/23,21Nov22,sex confirmed,1,d
+ME,F5,810,b,F,3/7/22,R,6,,6wk,2/2/23,,sex confirmed,1,c
+ME,F5,812,a,F,3/8/22,NA,6,,6wk,2/3/23,,sex confirmed,1,c
+ME,F5,812,l,M,3/27/22,R,14,,6wk,2/7/23,21Nov22,sex confirmed,2,b
+KN,F4,G410B,b,F,3/6/22,R,,,6wk,2/7/23,,sex confirmed,2,a
+KN,F4,G410B,c,M,3/6/22,NA,12,,6wk,2/7/23,21Nov22,sex confirmed,1,e
+KN,F4,G410C,b,F,3/21/22,NA,13,,6wk,2/3/23,,sex confirmed,2,c
+KN,F4,G412A,h,F,3/28/22,R,4,,6wk,1/31/23,,sex confirmed,3,b
+KN,F4,G412C,h,M,3/21/22,R,2,,6wk,1/31/23,21Nov22,sex confirmed,3,e
+KN,F4,G419A,e,M,3/17/22,NA,1,,6wk,1/31/23,21Nov22,sex confirmed,3,d
+KN,F4,G419B,o,M,3/21/22,R,7,,6wk,2/2/23,21Nov22,sex confirmed,1,b
+KN,F4,G43A,a,F,2/24/22,NA,12,,6wk,2/7/23,,sex confirmed,2,a
+KN,F4,G45B,a,M,2/22/22,R,,,6wk,2/3/23,21Nov22,sex confirmed,2,d
+KN,F4,G47A,h,F,3/21/22,R,13,,6wk,2/3/23,,sex confirmed,2,c
+ME,F5,801,e,M,3/8/22,NA,22312,,control,12/12/22,NA,no embedded gastrocs,,
+ME,F5,801,f,M,3/8/22,NA,22312,,control,3/7/23,12Dec22,gastroc taken for snRNA-Seq,,
+ME,F5,803,f,F,3/27/22,NA,22284,,control,2/23/23,,"ID Unsure, gastroc taken for snRNA-Seq",,
+ME,F5,805,a,M,3/8/22,NA,22282,,control,2/9/23,20Dec22,,,
+ME,F5,805,b,M,3/8/22,NA,22282,,control,2/23/23,20Dec22,,,
+ME,F5,807,j,F,3/30/22,R,22284,,control,3/16/23,,"ID Unsure, gastroc taken for snRNA-Seq",,
+ME,F5,807,k,F,3/28/22,R,22307-1,,control,3/7/23,,ID unsure,,
+ME,F5,812,b,F,3/8/22,NA,22313,,control,12/9/22?,,no embedded gastrocs,,
+ME,F5,812,e,M,3/8/22,NA,22304,,control,3/6/23,1Feb23,sex confirmed; pre-mature death; originally planned for 2day,,
+ME,F5,812,m,M,3/27/22,NA,22285,,control,3/16/23,21Nov22,gastroc taken for snRNA-Seq,,
+KN,F4,G410A,b,F,3/8/22,R,22291-1,,control,3/7/23,,,,
+KN,F4,G412A,e,F,3/28/22,R,22303,,control,2/9/23,,gastroc taken for snRNA-Seq,,
+KN,F4,G412C,m,F,3/21/22,NA,22301,,control,12/12/22,,no embedded gastrocs,,
+KN,F4,G412C,d,M,2/26/22,N/A,22287,,control,3/7/23,20Dec22,gastroc taken for snRNA-Seq,,
+KN,F4,G414A,e,F,3/1/22,NA,22295,,control,2/9/23,,,,
+KN,F4,G419B,c,M,2/23/22,NA,22286,,control,2/9/23,20Dec22,,,
+KN,F4,G43C,g,F,3/8/22,NA,22291-2,,control,3/16/23,,unexpected R ear mark or clip?,,
+KN,F4,G45B,b,M,3/17/22,R,22289,,control,2/23/23,20Dec22,"could not find ear clip, could be KN_F4_G47A_E",,
+KN,F4,G45C,c,M,2/22/22,NA,22310,,control,3/7/23,20Dec22,,,
+KN,F4,G47A,e,M,3/21/22,NA,22289,,control,3/16/23,20Dec22,"could not find ear clip, could be KN_F4_G45B_B, gastroc taken for snRNA-Seq",,
+KN,F4,G47B,e,F,3/28/22,NA,22303,,control,2/23/23,,,,
+KN,F4,G47B,a,M,3/28/22,NA,22297,,control,3/16/23,20Dec22,gastroc taken for snRNA-Seq,,
+ME,F5,812,f,M,3/8/22,NA,22304,,euthanized 10/13/22,,,,,
+ME,F5,808,h,M,3/22/22,R,22282,,found dead 10/17/22,,,,,
+ME,F5,803,e,M,4/4/22,NA,22308,,,found dead,,,,
+ME,F5,805,e,M,3/8/22,R,22296,,,,,found dead,,
+ME,F5,807,e,F,3/8/22,NA,22306,,,found dead,,,,
+ME,F5,808,c,F,2/22/22,NA,22296,,,,,,,
+ME,F5,810,e,M,3/7/22,NA,22311,,,found dead,,,,
+ME,F5,812,c,F,3/8/22,NA,22313,,,found dead,,,,
+KN,F4,G412C,o,F,3/21/22,NA,22301,,,found dead,,,,
